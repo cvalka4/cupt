@@ -112,6 +112,18 @@ bool NativeResolverImpl::__prepare_version_no_stick(
 	return true;
 }
 
+void NativeResolverImpl::setAutomaticallyInstalledFlag(const string& packageName, bool flagValue)
+{
+	if (flagValue)
+	{
+		__manually_modified_package_names.erase(packageName);
+	}
+	else
+	{
+		__manually_modified_package_names.insert(packageName);
+	}
+}
+
 void NativeResolverImpl::installVersion(const shared_ptr< const BinaryVersion >& version)
 {
 	const string& packageName = version->packageName;

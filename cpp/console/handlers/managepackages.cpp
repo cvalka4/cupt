@@ -227,6 +227,15 @@ static void processInstallOrRemoveExpression(const shared_ptr< const Cache >& ca
 	}
 }
 
+static void processAutoFlagChangeExpression(const shared_ptr< const Cache >& cache,
+		Resolver& resolver, ManagePackages::Mode mode, const string& packageExpression)
+{
+	getBinaryPackage(cache, packageExpression); // will throw if package name is wrong
+
+	resolver.setAutomaticallyInstalledFlag(packageExpression,
+			(mode == ManagePackages::Markauto));
+}
+
 static void processPackageExpressions(const shared_ptr< Config >& config,
 		const shared_ptr< const Cache >& cache, ManagePackages::Mode mode,
 		Resolver& resolver, const vector< string >& packageExpressions,
@@ -254,6 +263,14 @@ static void processPackageExpressions(const shared_ptr< Config >& config,
 		{
 			mode = ManagePackages::Unsatisfy;
 		}
+		else if (*packageExpressionIt == "--markauto")
+		{
+			mode = ManagePackages::Markauto;
+		}
+		else if (*packageExpressionIt == "--unmarkauto")
+		{
+			mode = ManagePackages::Unmarkauto;
+		}
 		else if (mode == ManagePackages::Satisfy || mode == ManagePackages::Unsatisfy)
 		{
 			processSatisfyExpression(config, resolver, *packageExpressionIt, mode);
@@ -261,6 +278,10 @@ static void processPackageExpressions(const shared_ptr< Config >& config,
 		else if (mode == ManagePackages::BuildDepends)
 		{
 			processBuildDependsExpression(config, cache, resolver, *packageExpressionIt);
+		}
+		else if (mode == ManagePackages::Markauto || mode == ManagePackages::Unmarkauto)
+		{
+			processAutoFlagChangeExpression(cache, resolver, mode, *packageExpressionIt);
 		}
 		else
 		{
@@ -703,7 +724,8 @@ void parseManagementOptions(Context& context, vector< string >& packageExpressio
 	auto extraParser = [](const string& input) -> pair< string, string >
 	{
 		const set< string > actionModifierOptionNames = {
-			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy"
+			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy",
+			"--markauto", "--unmarkauto"
 		};
 		if (actionModifierOptionNames.count(input))
 		{

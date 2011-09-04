@@ -161,6 +161,12 @@ class CUPT_API Resolver
 	 * Requests an upgrade of all installed packages (to their policy version).
 	 */
 	virtual void upgrade() = 0;
+	/**
+	 * Requests that if a solution will have the package @a packageName
+	 * installed, its corresponding Offer::SuggestedPackage::manuallySelected
+	 * flag will be the inversed value of @a flagValue.
+	 */
+	virtual void setAutomaticallyInstalledFlag(const string& packageName, bool flagValue) = 0;
 
 	/// perform a resolve computations
 	/**
