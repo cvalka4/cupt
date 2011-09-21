@@ -265,9 +265,12 @@ bool NativeResolverImpl::__is_candidate_for_auto_removal(const dg::Element* elem
 	{
 		return false;
 	}
-	if (__manually_modified_package_names.count(packageName))
-	{
-		return false;
+	{ // checking was the package initially requested
+		auto initialPackageIt = __initial_packages.find(packageName);
+		if (initialPackageIt != __initial_packages.end() && initialPackageIt->second.sticked)
+		{
+			return false;
+		}
 	}
 	if (version->essential)
 	{
