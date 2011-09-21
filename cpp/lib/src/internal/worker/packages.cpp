@@ -1671,7 +1671,7 @@ void PackagesWorker::__do_dpkg_pre_actions()
 	auto commands = _config->getList("dpkg::pre-invoke");
 	FORIT(commandIt, commands)
 	{
-		__run_dpkg_command("post", *commandIt, "");
+		__run_dpkg_command("pre", *commandIt, "");
 	}
 }
 
@@ -1764,11 +1764,17 @@ string PackagesWorker::__generate_input_for_preinstall_v2_hooks(
 			else
 			{
 				auto comparisonResult = compareVersionStrings(oldVersionString, newVersionString);
-				switch (comparisonResult)
+				if (comparisonResult < 0)
 				{
-					case -1: compareVersionStringsSign = "<"; break;
-					case  0: compareVersionStringsSign = "="; break;
-					case  1: compareVersionStringsSign = ">"; break;
+					compareVersionStringsSign = "<";
+				}
+				else if (comparisonResult == 0)
+				{
+					compareVersionStringsSign = "=";
+				}
+				else
+				{
+					compareVersionStringsSign = ">";
 				}
 			}
 
@@ -1821,6 +1827,10 @@ void PackagesWorker::__do_dpkg_pre_packages_actions(const vector< InnerActionGro
 						commandInput += "\n";
 					}
 				}
+			}
+			if (commandInput.empty())
+			{
+				continue;
 			}
 		}
 
@@ -1920,6 +1930,7 @@ void PackagesWorker::__do_downloads(const vector< pair< download::Manager::Downl
 	// don't bother ourselves with download preparings if nothing to download
 	if (!downloads.empty())
 	{
+		_logger->log(Logger::Subsystem::Packages, 2, "downloading packages");
 		auto archivesDirectory = _get_archives_directory();
 
 		string downloadResult;

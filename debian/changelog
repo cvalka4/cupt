@@ -1,4 +1,31 @@
-cupt (2.2.0~) UNRELEASED; urgency=low
+cupt (2.2.0) unstable; urgency=low
+
+  * Upload to unstable.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sat, 17 Sep 2011 16:17:38 +0300
+
+cupt (2.2.0~rc2) experimental; urgency=low
+
+  * lib:
+    - system/worker:
+      - Downloading of index data should continue regardless of the download
+        result of Release signature. Thanks to Karol Kozłowski for the report.
+      - Don't run pre-install-packages hooks if there is no packages to
+        unpack.
+      - [Jonathan Nieder] Switch back to system() for running commands without
+        an input, such as dpkg, providing them a standard input from
+        a terminal. Fixes the regression since 2.2.0~rc1. (Closes: #640849)
+    - hashsums:
+      - Don't check gcrypt version despite what is advised in its manual.
+        Linker does its work fine.
+  * debian:
+    - control:
+      'libcupt2-0': set Breaks against download methods earlier than 2.0.0~rc1
+      because of the redirect download option change.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 11 Sep 2011 13:52:25 +0300
+
+cupt (2.2.0~rc1) experimental; urgency=low
 
   * console:
     - Managing packages:
@@ -37,6 +64,7 @@ cupt (2.2.0~) UNRELEASED; urgency=low
       - Submit the input for a running commands using pipes instead of 'echo'
         shell command. (Closes: #637494)
       - Implemented logging.
+      - An initial support of repository index deltas.
     - config:
       - New option 'cupt::cache::release-file-expiration::ignore'.
       - Use APT option 'acquire::http::allowredirect' instead of Cupt-specific
@@ -66,6 +94,8 @@ cupt (2.2.0~) UNRELEASED; urgency=low
       - Add package entry to the cache even if the installed version requires
         the reinstallation. (Closes: #639605)
       - InstalledRecord: new method 'isBroken'.
+    - download/manager:
+      - Fixed handling of EINTR while polling waiter sockets.
   * doc:
     - cupt(1) manual:
       - Documented 'purge' subcommand.
@@ -75,19 +105,36 @@ cupt (2.2.0~) UNRELEASED; urgency=low
     - logrotate:
       - Created.
 
- -- Eugene V. Lyubimkin <jackyf@debian.org>  Wed, 13 Jul 2011 09:33:27 +0300
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 05 Sep 2011 19:05:03 +0300
 
-cupt (2.1.2~) UNRELEASED; urgency=low
+cupt (2.1.3) unstable; urgency=low
+
+  * lib:
+    - system/worker:
+      - 'getArchivesInfo': fixed returning absolute path for files downloaded
+        by APT. Thanks to Karol Kozłowski and James Vega for noticing.
+  * debian:
+    - libcupt2-0.install:
+      - Really install 'file' download method.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 24 Jul 2011 13:31:34 +0300
+
+cupt (2.1.2) unstable; urgency=low
 
   * console:
     - Fixed a crash (under certain conditions) when package wildcards are
       used within the 'shell' subcommand. Thanks to Karol Kozłowski for the
       report.
   * lib:
-    - Fixed a double use of va_list. Thanks to Julian Andres Klode for the
-      report and the patch. (Closes: #630824)
+    - common:
+      - Fixed a double use of va_list. Thanks to Julian Andres Klode for the
+        report and the patch. (Closes: #630824)
+    - system/worker:
+      - [Jonathan Nieder] Do not assume the return value from memcmp is -1, 0,
+        or 1. Fixes a bug in which cupt would sometimes leave out the <, =,
+        or > symbol in VERSION 2 input for preinstall hooks. (Closes: #633138)
 
- -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 20 Jun 2011 19:07:35 +0300
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 10 Jul 2011 13:10:46 +0300
 
 cupt (2.1.1) unstable; urgency=low
 
