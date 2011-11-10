@@ -112,6 +112,7 @@ bool NativeResolverImpl::__prepare_version_no_stick(
 	return true;
 }
 
+// FIXME/API break/blocker: worker::Offer has to learn about autoinstalled flag change
 void NativeResolverImpl::setAutomaticallyInstalledFlag(const string& packageName, bool flagValue)
 {
 	if (flagValue)
