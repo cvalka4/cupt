@@ -533,8 +533,59 @@ void showUnsatisfiedSoftDependencies(const Resolver::Offer& offer,
 	}
 }
 
-Resolver::UserAnswer::Type askUserAboutSolution(
-		const Config& config, bool isDangerous, bool& addArgumentsFlag)
+void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggestedPackages)
+{
+	cout << __("Enter a binary package name to show reason chain for (empty to cancel): ");
+	string answer;
+	std::getline(std::cin, answer);
+	if (answer.empty())
+	{
+		return;
+	}
+
+	string packageName = answer;
+	if (!suggestedPackages.count(packageName))
+	{
+		cout << format2(__("The package '%s' is not going to change its state."), packageName) << endl;
+		return;
+	}
+
+	for (;;)
+	{
+		auto reasonIt = suggestedPackages.find(packageName);
+		if (reasonIt == suggestedPackages.end())
+		{
+			fatal2("internal error: a reason chain is broken: the package '%s' is not changed", packageName);
+		}
+		const auto& reasons = reasonIt->second.reasons;
+		if (reasons.empty())
+		{
+			fatal2("internal error: no reasons available for the package '%s'", packageName);
+		}
+		const auto& reasonPtr = reasons[0];
+
+		cout << format2("  %s: %s", packageName, reasonPtr->toString()) << endl;
+		if (const auto& relationExpressionReasonPtr =
+				dynamic_pointer_cast< const Resolver::RelationExpressionReason >(reasonPtr))
+		{
+			// FIXME: we cannot determine a "predecessor reason" reliably
+			packageName = relationExpressionReasonPtr->version->packageName;
+		}
+		else if (const auto& syncReasonPtr = dynamic_pointer_cast< const Resolver::SynchronizationReason >(reasonPtr))
+		{
+			packageName = syncReasonPtr->relatedPackageName;
+		}
+		else
+		{
+			break;
+		}
+	}
+	cout << endl;
+}
+
+Resolver::UserAnswer::Type askUserAboutSolution(const Config& config,
+		const Resolver::SuggestedPackages& suggestedPackages,
+		bool isDangerous, bool& addArgumentsFlag)
 {
 	string answer;
 
@@ -549,7 +600,7 @@ Resolver::UserAnswer::Type askUserAboutSolution(
 	else
 	{
 		ask:
-		cout << __("Do you want to continue? [y/N/q/a/?] ");
+		cout << __("Do you want to continue? [y/N/q/a/rc/?] ");
 		std::getline(std::cin, answer);
 		if (!std::cin)
 		{
@@ -586,12 +637,18 @@ Resolver::UserAnswer::Type askUserAboutSolution(
 		addArgumentsFlag = true;
 		return Resolver::UserAnswer::Abandon;
 	}
+	else if (answer == "rc")
+	{
+		showReasonChainForAskedPackage(suggestedPackages);
+		goto ask;
+	}
 	else if (answer == "?")
 	{
 		cout << __("y: accept the solution") << endl;
 		cout << __("n: reject the solution, try to find other ones") << endl;
 		cout << __("q: reject the solution and exit") << endl;
 		cout << __("a: specify an additional binary package expression") << endl;
+		cout << __("rc: show a reason chain for a package") << endl;
 		cout << __("?: output this help") << endl << endl;
 		goto ask;
 	}
@@ -862,7 +919,7 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 			isDangerousAction = true;
 		}
 
-		return askUserAboutSolution(*config, isDangerousAction, addArgumentsFlag);
+		return askUserAboutSolution(*config, offer.suggestedPackages, isDangerousAction, addArgumentsFlag);
 	};
 
 	return result;
@@ -925,10 +982,7 @@ void parseManagementOptions(Context& context, ManagePackages::Mode mode,
 	{
 		config->setScalar("cupt::console::actions-preview::show-reasons", "yes");
 	}
-	if (config->getBool("cupt::console::actions-preview::show-reasons"))
-	{
-		config->setScalar("cupt::resolver::track-reasons", "yes");
-	}
+	config->setScalar("cupt::resolver::track-reasons", "yes");
 	if (variables.count("no-install-recommends"))
 	{
 		config->setScalar("apt::install-recommends", "no");
