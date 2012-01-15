@@ -722,7 +722,7 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 		addArgumentsFlag = false;
 		thereIsNothingToDo = false;
 
-		auto showReasons = config->getBool("cupt::resolver::track-reasons");
+		auto showReasons = config->getBool("cupt::console::actions-preview::show-reasons");
 		auto showSummary = config->getBool("cupt::console::actions-preview::show-summary");
 		auto showDetails = config->getBool("cupt::console::actions-preview::show-details");
 
@@ -922,6 +922,10 @@ void parseManagementOptions(Context& context, ManagePackages::Mode mode,
 		config->setScalar("cupt::console::assume-yes", "yes");
 	}
 	if (variables.count("show-reasons") || variables.count("show-deps"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-reasons", "yes");
+	}
+	if (config->getBool("cupt::console::actions-preview::show-reasons"))
 	{
 		config->setScalar("cupt::resolver::track-reasons", "yes");
 	}

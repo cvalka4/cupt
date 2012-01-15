@@ -191,6 +191,10 @@ Show always.
 boolean, if true, details of planned actions will be shown in the
 actions preview. True by default.
 
+=item cupt::console::actions-preview::show-reasons
+
+boolean, see L<cupt(1)> L<--show-reasons|/--show-reasons,--show-deps,-D>
+
 =item cupt::console::actions-preview::show-summary
 
 boolean, if true, a summary of planned actions will be shown in the
@@ -428,10 +432,6 @@ Forbid any modifications to the packages when at least one related binary
 package cannot be synchronized with the modified one.
 
 =back
-
-=item cupt::resolver::track-reasons
-
-boolean, see L<cupt(1)> L<--show-reasons|/--show-reasons,--show-deps,-D>
 
 =item cupt::resolver::type
 

@@ -114,6 +114,7 @@ void ConfigImpl::initializeVariables()
 		{ "cupt::console::actions-preview::show-not-preferred", "for-upgrades" },
 		{ "cupt::console::actions-preview::show-details", "yes" },
 		{ "cupt::console::actions-preview::show-summary", "yes" },
+		{ "cupt::console::actions-preview::show-reasons", "no" },
 		{ "cupt::console::use-colors", "no" },
 		{ "cupt::directory", "/" },
 		{ "cupt::directory::configuration", "etc/cupt" },
@@ -155,7 +156,7 @@ void ConfigImpl::initializeVariables()
 		{ "cupt::resolver::max-solution-count", "512" },
 		{ "cupt::resolver::no-remove", "no" },
 		{ "cupt::resolver::synchronize-by-source-versions", "none" },
-		{ "cupt::resolver::track-reasons", "no" },
+		{ "cupt::resolver::track-reasons", "no" }, // TODO/API Break/: deprecated, remove
 		{ "cupt::resolver::type", "fair" },
 		{ "cupt::resolver::score::new", "-5" },
 		{ "cupt::resolver::score::removal", "-1500" },

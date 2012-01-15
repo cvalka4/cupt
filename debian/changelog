@@ -10,6 +10,8 @@ cupt (2.4.0~) UNRELEASED; urgency=low
       - Adjusted default values of options
         'cupt::resolver::score::{new,removal,quality-adjustment}' for changes
         in the score calculation (see below).
+      - New option 'cupt::console::actions-preview::show-reasons' which
+        obsoletes the option 'cupt::resolver::track-reasons'.
     - system/resolvers/native:
       - Use normalized version priority in score calculations.
 
