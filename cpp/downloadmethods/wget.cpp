@@ -29,6 +29,7 @@ using boost::lexical_cast;
 #include <cupt/download/method.hpp>
 #include <cupt/download/uri.hpp>
 #include <cupt/pipe.hpp>
+#include <cupt/file.hpp>
 
 namespace cupt {
 
@@ -37,8 +38,6 @@ class WgetMethod: public cupt::download::Method
 	string perform(const shared_ptr< const Config >& config, const download::Uri& uri,
 			const string& targetPath, const std::function< void (const vector< string >&) >& callback)
 	{
-		Pipe wgetErrorStream("wget error stream");
-
 		std::condition_variable wgetProcessFinished;
 
 		try
@@ -93,31 +92,8 @@ class WgetMethod: public cupt::download::Method
 				}
 				p.push_back(string(uri));
 				p.push_back(string("--output-document=") + targetPath);
+				p.push_back("2>&1");
 			}
-
-			if (dup2(wgetErrorStream.getWriterFd(), STDOUT_FILENO) == -1) // redirecting stdout
-			{
-				fatal2("unable to redirect wget standard output: dup2 failed");
-			}
-			if (dup2(wgetErrorStream.getWriterFd(), STDERR_FILENO) == -1) // redirecting stderr
-			{
-				fatal2("unable to redirect wget error stream: dup2 failed");
-			}
-
-			string errorString;
-			std::thread readWgetErrorsThread([&errorString](int fd)
-			{
-				FILE* inputHandle = fdopen(fd, "r");
-				if (!inputHandle)
-				{
-					fatal2("unable to fdopen wget error stream");
-				}
-				char buf[1024];
-				while (fgets(buf, sizeof(buf), inputHandle), !feof(inputHandle))
-				{
-					errorString += buf;
-				}
-			}, wgetErrorStream.getReaderFd());
 
 			std::thread downloadingStatsThread([&targetPath, &totalBytes, &wgetProcessFinished, &callback]()
 			{
@@ -147,28 +123,32 @@ class WgetMethod: public cupt::download::Method
 				}
 			});
 
-			auto result = ::system(join(" ", p).c_str());
-			wgetProcessFinished.notify_all();
-			wgetErrorStream.useAsReader(); // close the writing part
-			readWgetErrorsThread.join();
-			downloadingStatsThread.join();
+			string errorString;
+			try
+			{
+				string openError;
+				// TODO: avoid 'pipe execution failed' messages on unsuccessful downloads
+				File wgetOutputFile(join(" ", p), "pr", openError);
+				if (!openError.empty())
+				{
+					fatal2("unable to launch a wget process: %s", openError);
+				}
 
-			if (result == -1)
-			{
-				fatal2e("failed to launch a wget process");
-			}
-			else if (!result)
-			{
-				if (WIFEXITED(result))
+				string line;
+				while (wgetOutputFile.getLine(line), !wgetOutputFile.eof())
 				{
-					return errorString;
+					errorString += line;
+					errorString += '\n';
 				}
-				else
-				{
-					fatal2("wget process exited abnormally");
-				}
+				wgetProcessFinished.notify_all();
+				downloadingStatsThread.join();
 			}
-			return ""; // unreachable
+			catch (Exception&)
+			{
+				return errorString;
+			}
+
+			return "";
 		}
 		catch (Exception& e)
 		{
