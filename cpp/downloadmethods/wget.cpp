@@ -15,8 +15,6 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <sys/time.h>
 #include <sys/stat.h>
 
@@ -32,49 +30,11 @@ using boost::lexical_cast;
 
 namespace cupt {
 
-static int childPid = 0;
-struct sigaction oldSigAction;
-
-void sigTermHandler(int)
-{
-	if (childPid != 0)
-	{
-		kill(childPid, SIGTERM); // with error checking, yeah
-	}
-	raise(SIGTERM); // terminate itself
-}
-
-void enableSigTermHandler()
-{
-	struct sigaction action;
-	memset(&action, sizeof(action), 0);
-	action.sa_handler = sigTermHandler;
-	if (sigemptyset(&action.sa_mask) == -1)
-	{
-		fatal2("sigemptyset failed");
-	}
-	action.sa_flags = SA_RESETHAND;
-	if (sigaction(SIGTERM, &action, &oldSigAction) == -1)
-	{
-		fatal2("wget download method: unable to setup SIGTERM handler: sigaction failed");
-	}
-}
-
-void disableSigTermHanlder()
-{
-	if (sigaction(SIGTERM, &oldSigAction, NULL) == -1)
-	{
-		fatal2("wget download method: unable to reset SIGTERM handler: sigaction failed");
-	}
-}
-
 class WgetMethod: public cupt::download::Method
 {
 	string perform(const shared_ptr< const Config >& config, const download::Uri& uri,
 			const string& targetPath, const std::function< void (const vector< string >&) >& callback)
 	{
-		enableSigTermHandler();
-
 		Pipe wgetErrorStream("wget error stream");
 		auto workerPid = fork();
 		if (workerPid == -1)
@@ -106,7 +66,6 @@ class WgetMethod: public cupt::download::Method
 			{
 				fatal2("wget wrapper process exited abnormally");
 			}
-			disableSigTermHanlder(); // we about to exit, restore it
 			if (WEXITSTATUS(workerStatus) != 0)
 			{
 				return errorString;
@@ -256,7 +215,6 @@ class WgetMethod: public cupt::download::Method
 				write(wgetErrorStream.getWriterFd(), "\n", 1);
 				exit(EXIT_FAILURE);
 			}
-			exit(0);
 		}
 	}
 };
