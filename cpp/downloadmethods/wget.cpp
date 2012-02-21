@@ -105,9 +105,9 @@ class WgetMethod: public cupt::download::Method
 			}
 
 			string errorString;
-			std::thread readWgetErrorsThread([&errorString]()
+			std::thread readWgetErrorsThread([&errorString](int fd)
 			{
-				FILE* inputHandle = fdopen(wgetErrorStream.getReaderFd(), "r");
+				FILE* inputHandle = fdopen(fd, "r");
 				if (!inputHandle)
 				{
 					fatal2("unable to fdopen wget error stream");
@@ -117,13 +117,13 @@ class WgetMethod: public cupt::download::Method
 				{
 					errorString += buf;
 				}
-			});
+			}, wgetErrorStream.getReaderFd());
 
-			std::thread downloadingStatsThread([&targetPath, &totalBytes]()
+			std::thread downloadingStatsThread([&targetPath, &totalBytes, &wgetProcessFinished, &callback]()
 			{
 				std::mutex conditionMutex;
-				std::unique_lock< std::mutex > conditionMutexLock(&conditionMutex);
-				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100) != std::cv_status::timeout))
+				std::unique_lock< std::mutex > conditionMutexLock(conditionMutex);
+				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100)) != std::cv_status::timeout)
 				{
 					struct stat st;
 					if (lstat(targetPath.c_str(), &st) == -1)
@@ -147,7 +147,7 @@ class WgetMethod: public cupt::download::Method
 				}
 			});
 
-			auto result = ::system(join(" ", params));
+			auto result = ::system(join(" ", p).c_str());
 			wgetProcessFinished.notify_all();
 			wgetErrorStream.useAsReader(); // close the writing part
 			readWgetErrorsThread.join();
