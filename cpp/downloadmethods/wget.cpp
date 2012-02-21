@@ -20,6 +20,7 @@
 
 #include <cstring>
 #include <thread>
+#include <chrono>
 
 #include <boost/lexical_cast.hpp>
 using boost::lexical_cast;
@@ -38,30 +39,7 @@ class WgetMethod: public cupt::download::Method
 	{
 		Pipe wgetErrorStream("wget error stream");
 
-		string errorString;
-		std::thread readWgetErrors([&errorString]()
-		{
-			FILE* inputHandle = fdopen(wgetErrorStream.getReaderFd(), "r");
-			if (!inputHandle)
-			{
-				fatal2("unable to fdopen wget error stream");
-			}
-			char buf[1024];
-			while (fgets(buf, sizeof(buf), inputHandle), !feof(inputHandle))
-			{
-				errorString += buf;
-			}
-
-			int workerStatus;
-			if (WEXITSTATUS(workerStatus) != 0)
-			{
-				return errorString;
-			}
-			else
-			{
-				return "";
-			}
-		});
+		std::condition_variable wgetProcessFinished;
 
 		try
 		{
@@ -83,29 +61,70 @@ class WgetMethod: public cupt::download::Method
 				}
 			}
 
-			auto wgetPid = fork();
-			if (wgetPid == -1)
+			// wget executor
+			vector< string > p; // array to put parameters
 			{
-				fatal2("unable to fork");
-			}
-			if (wgetPid)
-			{
-				childPid = wgetPid;
-				// still wrapper
-				int waitResult;
-				int childStatus;
-				struct timespec ts;
-				ts.tv_sec = 0;
-				ts.tv_nsec = 100 * 1000 * 1000; // 100 milliseconds
-				while (waitResult = waitpid(wgetPid, &childStatus, WNOHANG), !waitResult)
+				p.push_back("env");
+				auto proxy = getAcquireSuboptionForUri(config, uri, "proxy");
+				if (!proxy.empty() && proxy != "DIRECT")
 				{
-					if (nanosleep(&ts, NULL) == -1)
-					{
-						if (errno != EINTR)
-						{
-							fatal2("nanosleep failed");
-						}
-					}
+					p.push_back(uri.getProtocol() + "_proxy=" + proxy);
+				}
+				p.push_back("wget"); // passed as a binary name, not parameter
+				p.push_back("--continue");
+				p.push_back(string("--tries=") + lexical_cast< string >(config->getInteger("acquire::retries")+1));
+				auto maxSpeedLimit = getIntegerAcquireSuboptionForUri(config, uri, "dl-limit");
+				if (maxSpeedLimit)
+				{
+					p.push_back(string("--limit-rate=") + lexical_cast< string >(maxSpeedLimit) + "k");
+				}
+				if (proxy == "DIRECT")
+				{
+					p.push_back("--no-proxy");
+				}
+				if (uri.getProtocol() != "http" || !config->getBool("acquire::http::allowredirect"))
+				{
+					p.push_back("--max-redirect=0");
+				}
+				auto timeout = getIntegerAcquireSuboptionForUri(config, uri, "timeout");
+				if (timeout)
+				{
+					p.push_back(string("--timeout=") + lexical_cast< string >(timeout));
+				}
+				p.push_back(string(uri));
+				p.push_back(string("--output-document=") + targetPath);
+			}
+
+			if (dup2(wgetErrorStream.getWriterFd(), STDOUT_FILENO) == -1) // redirecting stdout
+			{
+				fatal2("unable to redirect wget standard output: dup2 failed");
+			}
+			if (dup2(wgetErrorStream.getWriterFd(), STDERR_FILENO) == -1) // redirecting stderr
+			{
+				fatal2("unable to redirect wget error stream: dup2 failed");
+			}
+
+			string errorString;
+			std::thread readWgetErrorsThread([&errorString]()
+			{
+				FILE* inputHandle = fdopen(wgetErrorStream.getReaderFd(), "r");
+				if (!inputHandle)
+				{
+					fatal2("unable to fdopen wget error stream");
+				}
+				char buf[1024];
+				while (fgets(buf, sizeof(buf), inputHandle), !feof(inputHandle))
+				{
+					errorString += buf;
+				}
+			});
+
+			std::thread downloadingStatsThread([&targetPath, &totalBytes]()
+			{
+				std::mutex conditionMutex;
+				std::unique_lock< std::mutex > conditionMutexLock(&conditionMutex);
+				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100) != std::cv_status::timeout))
+				{
 					struct stat st;
 					if (lstat(targetPath.c_str(), &st) == -1)
 					{
@@ -126,78 +145,34 @@ class WgetMethod: public cupt::download::Method
 						}
 					}
 				}
-				if (waitResult == -1)
-				{
-					fatal2("waitpid failed");
-				}
-				if (!WIFEXITED(childStatus) || WEXITSTATUS(childStatus) != 0)
-				{
-					_exit(EXIT_FAILURE);
-				}
-			}
-			else
+			});
+
+			auto result = ::system(join(" ", params));
+			wgetProcessFinished.notify_all();
+			wgetErrorStream.useAsReader(); // close the writing part
+			readWgetErrorsThread.join();
+			downloadingStatsThread.join();
+
+			if (result == -1)
 			{
-				// wget executor
-				vector< string > p; // temporary array to put parameters
-				{
-					p.push_back("env");
-					auto proxy = getAcquireSuboptionForUri(config, uri, "proxy");
-					if (!proxy.empty() && proxy != "DIRECT")
-					{
-						p.push_back(uri.getProtocol() + "_proxy=" + proxy);
-					}
-					p.push_back("wget"); // passed as a binary name, not parameter
-					p.push_back("--continue");
-					p.push_back(string("--tries=") + lexical_cast< string >(config->getInteger("acquire::retries")+1));
-					auto maxSpeedLimit = getIntegerAcquireSuboptionForUri(config, uri, "dl-limit");
-					if (maxSpeedLimit)
-					{
-						p.push_back(string("--limit-rate=") + lexical_cast< string >(maxSpeedLimit) + "k");
-					}
-					if (proxy == "DIRECT")
-					{
-						p.push_back("--no-proxy");
-					}
-					if (uri.getProtocol() != "http" || !config->getBool("acquire::http::allowredirect"))
-					{
-						p.push_back("--max-redirect=0");
-					}
-					auto timeout = getIntegerAcquireSuboptionForUri(config, uri, "timeout");
-					if (timeout)
-					{
-						p.push_back(string("--timeout=") + lexical_cast< string >(timeout));
-					}
-					p.push_back(string(uri));
-					p.push_back(string("--output-document=") + targetPath);
-				}
-
-				vector< char* > params;
-				FORIT(it, p)
-				{
-					params.push_back(strdup(it->c_str()));
-				}
-				params.push_back(NULL);
-
-				if (dup2(wgetErrorStream.getWriterFd(), STDOUT_FILENO) == -1) // redirecting stdout
-				{
-					fatal2("unable to redirect wget standard output: dup2 failed");
-				}
-				if (dup2(wgetErrorStream.getWriterFd(), STDERR_FILENO) == -1) // redirecting stderr
-				{
-					fatal2("unable to redirect wget error stream: dup2 failed");
-				}
-				execv("/usr/bin/env", &params[0]);
-				// if we are here, exec returned an error
-				fatal2("unable to launch wget process");
+				fatal2e("failed to launch a wget process");
 			}
+			else if (!result)
+			{
+				if (WIFEXITED(result))
+				{
+					return errorString;
+				}
+				else
+				{
+					fatal2("wget process returned an error: %s", getWaitStatusDescription(result));
+				}
+			}
+			return ""; // unreachable
 		}
 		catch (Exception& e)
 		{
-			char nonWgetError[] = "download method error: ";
-			write(wgetErrorStream.getWriterFd(), nonWgetError, sizeof(nonWgetError) - 1);
-			write(wgetErrorStream.getWriterFd(), e.what(), strlen(e.what()));
-			write(wgetErrorStream.getWriterFd(), "\n", 1);
-			exit(EXIT_FAILURE);
+			return format2("download method error: %s", e.what());
 		}
 	}
 };
