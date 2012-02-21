@@ -123,7 +123,7 @@ class WgetMethod: public cupt::download::Method
 			{
 				std::mutex conditionMutex;
 				std::unique_lock< std::mutex > conditionMutexLock(conditionMutex);
-				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100)) != std::cv_status::timeout)
+				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100)) == std::cv_status::timeout)
 				{
 					struct stat st;
 					if (lstat(targetPath.c_str(), &st) == -1)
@@ -165,7 +165,7 @@ class WgetMethod: public cupt::download::Method
 				}
 				else
 				{
-					fatal2("wget process returned an error: %s", getWaitStatusDescription(result));
+					fatal2("wget process exited abnormally");
 				}
 			}
 			return ""; // unreachable
