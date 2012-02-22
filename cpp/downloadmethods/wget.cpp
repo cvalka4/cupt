@@ -124,10 +124,11 @@ class WgetMethod: public cupt::download::Method
 			});
 
 			string errorString;
+			auto oldMessageFd = cupt::messageFd; // disable printing errors
+			cupt::messageFd = -1;
 			try
 			{
 				string openError;
-				// TODO: avoid 'pipe execution failed' messages on unsuccessful downloads
 				File wgetOutputFile(join(" ", p), "pr", openError);
 				if (!openError.empty())
 				{
@@ -145,9 +146,11 @@ class WgetMethod: public cupt::download::Method
 			}
 			catch (Exception&)
 			{
+				cupt::messageFd = oldMessageFd;
 				return errorString;
 			}
 
+			cupt::messageFd = oldMessageFd;
 			return "";
 		}
 		catch (Exception& e)
