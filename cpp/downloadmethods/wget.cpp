@@ -36,7 +36,9 @@ class WgetMethod: public cupt::download::Method
 	string perform(const shared_ptr< const Config >& config, const download::Uri& uri,
 			const string& targetPath, const std::function< void (const vector< string >&) >& callback)
 	{
-		std::condition_variable wgetProcessFinished;
+		bool wgetProcessFinished = false;
+		std::condition_variable wgetProcessFinishedCV;
+		std::mutex wgetProcessFinishedMutex;
 
 		try
 		{
@@ -93,11 +95,12 @@ class WgetMethod: public cupt::download::Method
 				p.push_back("2>&1");
 			}
 
-			std::thread downloadingStatsThread([&targetPath, &totalBytes, &wgetProcessFinished, &callback]()
+			std::thread downloadingStatsThread([&targetPath, &totalBytes, &callback,
+					&wgetProcessFinishedMutex, &wgetProcessFinishedCV, &wgetProcessFinished]()
 			{
-				std::mutex conditionMutex;
-				std::unique_lock< std::mutex > conditionMutexLock(conditionMutex);
-				while (wgetProcessFinished.wait_for(conditionMutexLock, std::chrono::milliseconds(100)) == std::cv_status::timeout)
+				std::unique_lock< std::mutex > conditionMutexLock(wgetProcessFinishedMutex);
+				while (!wgetProcessFinishedCV.wait_for(conditionMutexLock, std::chrono::milliseconds(100),
+						[&wgetProcessFinished](){ return wgetProcessFinished; }))
 				{
 					struct stat st;
 					if (lstat(targetPath.c_str(), &st) == -1)
@@ -139,7 +142,12 @@ class WgetMethod: public cupt::download::Method
 					errorString += line;
 					errorString += '\n';
 				}
-				wgetProcessFinished.notify_all();
+
+				{
+					std::lock_guard< std::mutex > guard(wgetProcessFinishedMutex);
+					wgetProcessFinished = true;
+				}
+				wgetProcessFinishedCV.notify_all();
 				downloadingStatsThread.join();
 			}
 			catch (Exception&)
