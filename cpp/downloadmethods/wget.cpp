@@ -15,11 +15,10 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#include <sys/time.h>
 #include <sys/stat.h>
 
-#include <cstring>
 #include <thread>
+#include <atomic>
 #include <chrono>
 
 #include <boost/lexical_cast.hpp>
@@ -28,7 +27,6 @@ using boost::lexical_cast;
 #include <cupt/config.hpp>
 #include <cupt/download/method.hpp>
 #include <cupt/download/uri.hpp>
-#include <cupt/pipe.hpp>
 #include <cupt/file.hpp>
 
 namespace cupt {
