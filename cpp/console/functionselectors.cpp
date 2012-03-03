@@ -124,7 +124,7 @@ class VersionSet
 class CommonFS: public FS
 {
  public:
-	typedef list< string > Arguments;
+	typedef vector< string > Arguments;
 	virtual FS::Result select(VersionSet&& from) = 0;
 };
 
@@ -254,9 +254,9 @@ class PriorityFS: public PredicateFS
 	}
 }
 
-constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
+FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
 {
-	#define CONSTRUCT_FS(name, code) if (functionName == name) { return code; }
+	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	CONSTRUCT_FS("and", AndFS(arguments))
 	CONSTRUCT_FS("package", RegexMatchFS([](const SPCV& version) { return version->packageName; }, arguments))
 	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version) { return version->priority; }, arguments))
@@ -264,7 +264,33 @@ constructFSByName(const string& functionName, const CommonFS::Arguments& argumen
 	__builtin_unreachable();
 }
 
+}
+
 unique_ptr< FS > parseFunctionQuery(const string& query)
 {
-
+	try
+	{
+		if (query.empty())
+		{
+			fatal2(__("query cannot be empty"));
+		}
+		auto argumentsPosition = query.find_first_of("()");
+		if (query[argumentsPosition] == ')')
+		{
+			fatal2(__("closing bracket ')' doesn't have a corresponding opening bracket '('"));
+		}
+		// now we know it's surely '('
+		if (query.back() != ')')
+		{
+			fatal2(__("the last query character is not a closing bracket ')'"));
+		}
+		string functionName = query.substr(0, argumentsPosition);
+		string arguments = split(',', query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+		return constructFSByName(functionName, arguments);
+	}
+	catch (Exception&)
+	{
+		fatal2(__("unable to parse the query '%s'"), query);
+	}
 }
+
