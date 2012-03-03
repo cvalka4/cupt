@@ -15,9 +15,23 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#include <cupt/regex.hpp>
+#include <common/regex.hpp>
+
+#include <cupt/cache/binarypackage.hpp>
+#include <cupt/cache/sourcepackage.hpp>
+
+#include "functionselectors.hpp"
 
 typedef FunctionSelector FS;
+typedef shared_ptr< const Version > SPCV;
+typedef list< SPCV > FSResult;
+
+
+FunctionSelector::FunctionSelector()
+{}
+
+FunctionSelector::~FunctionSelector()
+{}
 
 namespace {
 
@@ -25,39 +39,40 @@ class VersionSetGetter
 {
 	bool __binary; // source if false
 	const Cache& __cache;
-	mutable FS::Result* __cached_all_versions;
+	mutable FSResult* __cached_all_versions;
 
 	vector< string > __get_package_names() const
 	{
 		return __binary ? __cache.getBinaryPackageNames() : __cache.getSourcePackageNames();
 	}
-	shared_ptr< Package > __get_package(const string& packageName) const
+	shared_ptr< const Package > __get_package(const string& packageName) const
 	{
-		return __binary ? __cache.getBinaryPackage(packageName) : __cache.getSourcePackage(packageName);
+		return __binary ? shared_ptr< const Package >(__cache.getBinaryPackage(packageName))
+				: shared_ptr< const Package >(__cache.getSourcePackage(packageName));
 	}
  public:
-	explicit AllVersionGetter(const Cache& cache, bool binary)
+	explicit VersionSetGetter(const Cache& cache, bool binary)
 		: __binary(binary), __cache(cache), __cached_all_versions(NULL)
 	{}
-	const FS::Result& getAll() const
+	const FSResult& getAll() const
 	{
 		if (!__cached_all_versions)
 		{
-			__cached_result = new FS::Result;
+			__cached_all_versions = new FSResult;
 			for (const string& packageName: __get_package_names())
 			{
 				for (auto&& version: __get_package(packageName)->getVersions())
 				{
-					__cached_result->emplace_back(std::move(version));
+					__cached_all_versions->emplace_back(std::move(version));
 				}
 			}
 		}
-		return *__cached_result;
+		return *__cached_all_versions;
 	}
-	FS::Result get(const sregex& regex) const
+	FSResult get(const sregex& regex) const
 	{
 		smatch m;
-		FS::Result result;
+		FSResult result;
 		for (const string& packageName: __get_package_names())
 		{
 			if (!regex_match(packageName, m, regex))
@@ -71,28 +86,26 @@ class VersionSetGetter
 		}
 		return result;
 	}
-	~AllVersionGetter()
+	~VersionSetGetter()
 	{
-		delete __cache_result;
+		delete __cached_all_versions;
 	}
 };
 
-typedef shared_ptr< const Version >& SPCV;
-
 class VersionSet
 {
-	const AllVersionGetter* __getter;
+	const VersionSetGetter* __getter;
 	bool __filtered;
-	FS::Result __versions;
+	FSResult __versions;
 
  public:
-	explicit VersionSet(const AllVersionGetter* getter)
+	explicit VersionSet(const VersionSetGetter* getter)
 		: __getter(getter), __filtered(false)
 	{}
-	VersionSet(FS::Result&& versions)
+	VersionSet(FSResult&& versions)
 		: __filtered(true), __versions(std::move(versions))
 	{}
-	FS::Result get()
+	FSResult get()
 	{
 		if (__filtered)
 		{
@@ -103,7 +116,7 @@ class VersionSet
 			return __getter->getAll();
 		}
 	}
-	FS::Result get(const sregex& regex)
+	FSResult get(const sregex& regex)
 	{
 		if (__filtered)
 		{
@@ -119,13 +132,13 @@ class VersionSet
 			return __getter->get(regex);
 		}
 	}
-}
+};
 
 class CommonFS: public FS
 {
  public:
 	typedef vector< string > Arguments;
-	virtual FS::Result select(VersionSet&& from) = 0;
+	virtual FSResult select(VersionSet&& from) const = 0;
 };
 
 void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
@@ -139,7 +152,7 @@ void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
 class AlgeFS: public CommonFS
 {
  protected:
-	list< unique< CommonFS > > _leaves;
+	list< unique_ptr< CommonFS > > _leaves;
  public:
 	// postcondition: _leaves are not empty
 	AlgeFS(const Arguments& arguments)
@@ -150,22 +163,24 @@ class AlgeFS: public CommonFS
 		}
 		for (const auto& argument: arguments)
 		{
-			_leaves.push_back(parseFunctionQuery(argument));
+			auto parsedQuery = parseFunctionQuery(argument);
+			_leaves.push_back(unique_ptr< CommonFS >(static_cast< CommonFS* >(parsedQuery.release())));
 		}
 	}
 };
 
 class AndFS: public AlgeFS
 {
+ public:
 	AndFS(const Arguments& arguments)
 		: AlgeFS(arguments)
 	{}
-	FS::Result select(VersionSet&& from)
+	FSResult select(VersionSet&& from) const
 	{
-		auto result = __leaves.front().select(std::move(from));
-		for (auto it = __leaves.begin() + 1; it != __leaves.end(); ++it)
+		auto result = _leaves.front()->select(std::move(from));
+		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
-			result = it->select(std::move(result));
+			result = (*it)->select(std::move(result));
 		}
 		return result;
 	}
@@ -174,15 +189,15 @@ class AndFS: public AlgeFS
 class PredicateFS: public CommonFS
 {
  protected:
-	virtual bool _match(const SPCV& version) = 0;
+	virtual bool _match(const SPCV& version) const = 0;
  public:
-	FS::Result select(VersionSet&& from)
+	FSResult select(VersionSet&& from) const
 	{
-		FS::Result result = from.get();
+		FSResult result = from.get();
 		result.remove_if([this](const SPCV& version) { return !this->_match(version); });
 		return result;
 	}
-}
+};
 
 sregex __parse_regex(const string& input)
 {
@@ -193,19 +208,25 @@ sregex __parse_regex(const string& input)
 	catch (regex_error&)
 	{
 		fatal2(__("regular expression '%s' is not valid"), input);
+		__builtin_unreachable();
 	}
 }
 
 class RegexMatcher
 {
 	sregex __regex;
-	smatch __m;
+	mutable smatch __m;
+
+	static sregex __get_regex_from_arguments(const CommonFS::Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 1);
+		return __parse_regex(arguments[0]);
+	}
  public:
-	RegexMatcher(const Arguments& arguments)
-		: __regex(__require_n_arguments(arguments, 1), __get_regex(arguments[0]))
+	RegexMatcher(const CommonFS::Arguments& arguments)
+		: __regex(__get_regex_from_arguments(arguments))
 	{}
- protected:
-	bool match(const string& input)
+	bool match(const string& input) const
 	{
 		return regex_match(input, __m, __regex);
 	}
@@ -213,55 +234,43 @@ class RegexMatcher
 
 class RegexMatchFS: public PredicateFS
 {
-	RegexMatcher __regex_matcher;
 	std::function< string (const SPCV&) > __get_attribute;
+	RegexMatcher __regex_matcher;
  public:
-	PackageNameFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
+	RegexMatchFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
 		: __get_attribute(getAttribute), __regex_matcher(arguments)
 	{}
  protected:
-	bool _match(const SPCV& version)
+	bool _match(const SPCV& version) const
 	{
 		return __regex_matcher.match(__get_attribute(version));
 	}
 };
-
-class PackageNameFS: public PredicateFS
-{
-	RegexMatcher __regex_matcher;
- public:
-	PackageNameFS(const Arguments& arguments)
-		: __regex_matcher(arguments)
-	{}
- protected:
-	bool _match(const SPCV& version)
-	{
-		return __regex_matcher.match(version->packageName);
-	}
-};
-
-class PriorityFS: public PredicateFS
-{
-	RegexMatcher __regex_matcher;
- public:
-	PriorityFS(const Arguments& arguments)
-		: __regex_matcher(arguments)
-	{}
- protected:
-	bool _match(const shared_ptr< const Version >& version)
-	{
-		return __regex_matches.match(version->priority);
-	}
-}
 
 FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	CONSTRUCT_FS("and", AndFS(arguments))
 	CONSTRUCT_FS("package", RegexMatchFS([](const SPCV& version) { return version->packageName; }, arguments))
-	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version) { return version->priority; }, arguments))
+	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
+			{ return Version::Priorities::strings[version->priority]; }
+			, arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
 	__builtin_unreachable();
+}
+
+vector< string > split(char delimiter, const string& input)
+{
+	vector< string > result;
+	size_t startPosition = 0;
+	size_t position;
+	while (position = input.find(startPosition, delimiter), position != string::npos)
+	{
+		result.push_back(input.substr(startPosition, position - startPosition));
+		startPosition = position+1;
+	}
+	result.push_back(input.substr(startPosition, input.size() - startPosition));
+	return result;
 }
 
 }
@@ -285,12 +294,28 @@ unique_ptr< FS > parseFunctionQuery(const string& query)
 			fatal2(__("the last query character is not a closing bracket ')'"));
 		}
 		string functionName = query.substr(0, argumentsPosition);
-		string arguments = split(',', query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
-		return constructFSByName(functionName, arguments);
+		auto arguments = split(',', query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+		return unique_ptr< FS >(constructFSByName(functionName, arguments));
 	}
 	catch (Exception&)
 	{
 		fatal2(__("unable to parse the query '%s'"), query);
+		__builtin_unreachable();
 	}
+}
+
+vector< SPCV > selectVersions(const Cache& cache, const FS& functionSelector, bool binary)
+{
+	VersionSetGetter versionSetGetter(cache, binary);
+	const CommonFS* commonFS = dynamic_cast< const CommonFS* >(&functionSelector);
+	if (!commonFS)
+	{
+		fatal2i("selectVersion: functionSelector is not an ancestor of CommonFS");
+	}
+	auto selected = commonFS->select(VersionSet(&versionSetGetter));
+
+	vector< SPCV > result;
+	std::move(selected.begin(), selected.end(), std::back_inserter(result));
+	return result;
 }
 

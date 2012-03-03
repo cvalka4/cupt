@@ -30,6 +30,7 @@
 
 #include "common.hpp"
 #include "selectors.hpp"
+#include "functionselectors.hpp"
 
 typedef shared_ptr< const Version > (*__version_selector)(shared_ptr< const Cache >,
 		const string& packageName, bool throwOnError);
@@ -278,17 +279,29 @@ static vector< string > getBinaryPackageNames(shared_ptr< const Cache > cache)
 	return cache->getBinaryPackageNames();
 }
 
+static bool isFunctionExpression(const string& expression)
+{
+	return (expression.find_first_of("()") != string::npos);
+}
+
 vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression, bool throwOnError)
 {
-	auto versionSelector =
-			[](shared_ptr< const Cache > cache, const string& packageName, bool throwOnError) -> shared_ptr< const Version >
-			{
-				return static_pointer_cast< const Version >(selectBinaryVersion(cache, packageName, throwOnError));
-			};
-
-	auto source = __select_versions_wildcarded(cache, packageExpression, versionSelector,
-			getBinaryPackageNames, throwOnError);
+	vector< shared_ptr< const Version > > source;
+	if (isFunctionExpression(packageExpression))
+	{
+		source = selectVersions(*cache, *parseFunctionQuery(packageExpression), true);
+	}
+	else
+	{
+		auto versionSelector =
+				[](shared_ptr< const Cache > cache, const string& packageName, bool throwOnError) -> shared_ptr< const Version >
+				{
+					return static_pointer_cast< const Version >(selectBinaryVersion(cache, packageName, throwOnError));
+				};
+		source = __select_versions_wildcarded(cache, packageExpression, versionSelector,
+				getBinaryPackageNames, throwOnError);
+	}
 
 	vector< shared_ptr< const BinaryVersion > > result;
 	for (size_t i = 0; i < source.size(); ++i)

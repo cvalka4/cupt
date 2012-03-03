@@ -18,22 +18,26 @@
 #ifndef CUPT_CONSOLE_FUNCTION_SELECTORS_SEEN
 #define CUPT_CONSOLE_FUNCTION_SELECTORS_SEEN
 
+#include <memory>
 #include <list>
-using std::list;
 
 #include "common.hpp"
 
+using std::unique_ptr;
+using std::list;
+
 class FunctionSelector
 {
+ protected:
+	FunctionSelector();
  public:
-	typedef list< shared_ptr< Version > > Result
-	virtual ~FunctionSelector() = 0;
+	virtual ~FunctionSelector();
 };
 
 unique_ptr< FunctionSelector > parseFunctionQuery(const string&);
 
-FunctionSelector::Result selectVersions(const FunctionSelector&);
-vector< string > getPackageNames(const FunctionSelector::Result&);
+vector< shared_ptr< const Version > > selectVersions(
+		const Cache&, const FunctionSelector&, bool binary);
 
 #endif
 
