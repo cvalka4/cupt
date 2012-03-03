@@ -123,8 +123,16 @@ class CommonFS: public FS
 {
  public:
 	typedef list< string > Arguments;
-	virtual FS::Result select(const Cache& cache, bool filteredAlready, FS::Result&& from);
+	virtual FS::Result select(VersionSet&& from) = 0;
 };
+
+void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
+{
+	if (arguments.size() != n)
+	{
+		fatal2(__("the function requires exactly '%zu' arguments"), n);
+	}
+}
 
 class AlgeFS: public CommonFS
 {
@@ -150,11 +158,72 @@ class AndFS: public AlgeFS
 	AndFS(const Arguments& arguments)
 		: AlgeFS(arguments)
 	{}
-	FS::Result select(const Cache&, FS::Result&& from)
+	FS::Result select(VersionSet&& from)
 	{
-
+		auto result = __leaves.front().select(std::move(from));
+		for (auto it = __leaves.begin() + 1; it != __leaves.end(); ++it)
+		{
+			result = it->select(std::move(result));
+		}
+		return result;
 	}
 };
+
+class PredicateFS: public CommonFS
+{
+ protected:
+	virtual bool _match(const shared_ptr< const Version >& version) = 0;
+ public:
+	FS::Result select(VersionSet&& from)
+	{
+		FS::Result result = from.get();
+		result.remove_if([this](const shared_ptr< const Version >& version)
+		{
+			if (this->_match(version);
+		});
+	}
+}
+
+sregex __parse_regex(const string& input)
+{
+	try
+	{
+		return sregex::compile(input, regex_constants::optimize);
+	}
+	catch (regex_error&)
+	{
+		fatal2(__("regular expression '%s' is not valid"), input);
+	}
+}
+
+class RegexMatcher
+{
+	sregex __regex;
+	smatch __m;
+ public:
+	RegexMatcher(const Arguments& arguments)
+		: __package_name_regex(__require_n_arguments(1), __get_regex(arguments[0]))
+	{}
+ protected:
+	bool _match(const shared_ptr< const Version >& version)
+	{
+		return 
+	}
+};
+
+class PackageNameFS: public PredicateFS
+{
+	sregex __package_name_regex;
+ public:
+	PackageNameFS(const Arguments& arguments)
+		: __package_name_regex(__require_n_arguments(1), __get_regex(arguments[0]))
+	{}
+ protected:
+	bool _match(const shared_ptr< const Version >& version)
+	{
+		return 
+	}
+}
 
 }
 
