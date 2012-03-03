@@ -77,6 +77,8 @@ class VersionSetGetter
 	}
 };
 
+typedef shared_ptr< const Version >& SPCV;
+
 class VersionSet
 {
 	const AllVersionGetter* __getter;
@@ -106,7 +108,7 @@ class VersionSet
 		if (__filtered)
 		{
 			smatch m;
-			__versions.remove_if([&regex, &m](const shared_ptr< const Version >& version)
+			__versions.remove_if([&regex, &m](const SPCV& version)
 			{
 				return !regex_match(version->packageName, m, regex);
 			});
@@ -172,15 +174,13 @@ class AndFS: public AlgeFS
 class PredicateFS: public CommonFS
 {
  protected:
-	virtual bool _match(const shared_ptr< const Version >& version) = 0;
+	virtual bool _match(const SPCV& version) = 0;
  public:
 	FS::Result select(VersionSet&& from)
 	{
 		FS::Result result = from.get();
-		result.remove_if([this](const shared_ptr< const Version >& version)
-		{
-			if (this->_match(version);
-		});
+		result.remove_if([this](const SPCV& version) { return !this->_match(version); });
+		return result;
 	}
 }
 
@@ -202,29 +202,63 @@ class RegexMatcher
 	smatch __m;
  public:
 	RegexMatcher(const Arguments& arguments)
-		: __package_name_regex(__require_n_arguments(1), __get_regex(arguments[0]))
+		: __regex(__require_n_arguments(arguments, 1), __get_regex(arguments[0]))
 	{}
  protected:
-	bool _match(const shared_ptr< const Version >& version)
+	bool match(const string& input)
 	{
-		return 
+		return regex_match(input, __m, __regex);
+	}
+};
+
+class RegexMatchFS: public PredicateFS
+{
+	RegexMatcher __regex_matcher;
+	std::function< string (const SPCV&) > __get_attribute;
+ public:
+	PackageNameFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
+		: __get_attribute(getAttribute), __regex_matcher(arguments)
+	{}
+ protected:
+	bool _match(const SPCV& version)
+	{
+		return __regex_matcher.match(__get_attribute(version));
 	}
 };
 
 class PackageNameFS: public PredicateFS
 {
-	sregex __package_name_regex;
+	RegexMatcher __regex_matcher;
  public:
 	PackageNameFS(const Arguments& arguments)
-		: __package_name_regex(__require_n_arguments(1), __get_regex(arguments[0]))
+		: __regex_matcher(arguments)
+	{}
+ protected:
+	bool _match(const SPCV& version)
+	{
+		return __regex_matcher.match(version->packageName);
+	}
+};
+
+class PriorityFS: public PredicateFS
+{
+	RegexMatcher __regex_matcher;
+ public:
+	PriorityFS(const Arguments& arguments)
+		: __regex_matcher(arguments)
 	{}
  protected:
 	bool _match(const shared_ptr< const Version >& version)
 	{
-		return 
+		return __regex_matches.match(version->priority);
 	}
 }
 
+constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
+{
+	#define CONSTRUCT_FS(name, code) if (functionName == name) { return code; }
+	CONSTRUCT_FS("and", AndFS(arguments))
+	CONSTRUCT_FS("package", RegexMatchFS([](const SPCV& version) { return version->packageName; }, arguments))
 }
 
 unique_ptr< FS > parseFunctionQuery(const string& query)
