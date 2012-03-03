@@ -259,6 +259,9 @@ constructFSByName(const string& functionName, const CommonFS::Arguments& argumen
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return code; }
 	CONSTRUCT_FS("and", AndFS(arguments))
 	CONSTRUCT_FS("package", RegexMatchFS([](const SPCV& version) { return version->packageName; }, arguments))
+	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version) { return version->priority; }, arguments))
+	fatal2(__("unknown selector function '%s'"), functionName);
+	__builtin_unreachable();
 }
 
 unique_ptr< FS > parseFunctionQuery(const string& query)
