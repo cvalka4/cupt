@@ -15,25 +15,50 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#ifndef CUPT_CONSOLE_FUNCTION_SELECTORS_SEEN
-#define CUPT_CONSOLE_FUNCTION_SELECTORS_SEEN
+typedef FunctionSelector FS;
 
-#include <list>
-using std::list;
+namespace {
 
-#include "common.hpp"
-
-class FunctionSelector
+class CommonFS: public FS
 {
  public:
-	typedef list< shared_ptr< Version > > Result
-	virtual ~FunctionSelector() = 0;
+	typedef list< string > Arguments;
+	virtual FS::Result select(const Cache& cache, FS::Result&& from);
 };
 
-unique_ptr< FunctionSelector > parseFunctionQuery(const string&);
+class AlgeFS: public CommonFS
+{
+ protected:
+	list< unique< CommonFS > > _leaves;
+ public:
+	// postcondition: _leaves are not empty
+	AlgeFS(const Arguments& arguments)
+	{
+		if (arguments.empty())
+		{
+			fatal2(__("the function should have at least one argument"));
+		}
+		for (const auto& argument: arguments)
+		{
+			_leaves.push_back(parseFunctionQuery(argument));
+		}
+	}
+};
 
-FunctionSelector::Result selectVersions(const FunctionSelector&);
-vector< string > getPackageNames(const FunctionSelector::Result&);
+class AndFS: public AlgeFS
+{
+	AndFS(const Arguments& arguments)
+		: AlgeFS(arguments)
+	{}
+	FS::Result select(const Cache&, FS::Result&& from)
+	{
 
-#endif
+	}
+};
 
+}
+
+unique_ptr< FS > parseFunctionQuery(const string& query)
+{
+
+}
