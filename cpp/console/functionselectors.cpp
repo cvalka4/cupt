@@ -174,7 +174,7 @@ void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
 {
 	if (arguments.size() != n)
 	{
-		fatal2(__("the function requires exactly '%zu' arguments"), n);
+		fatal2(__("the function requires exactly %zu arguments"), n);
 	}
 }
 
