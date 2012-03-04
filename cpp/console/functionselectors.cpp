@@ -344,6 +344,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
+	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
 	// binary
 	CONSTRUCT_FS("sourcepackage", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
