@@ -36,8 +36,12 @@ class FunctionSelector
 
 unique_ptr< FunctionSelector > parseFunctionQuery(const string&);
 
-vector< shared_ptr< const Version > > selectVersions(
+list< shared_ptr< const Version > > selectAllVersions(
 		const Cache&, const FunctionSelector&, bool binary);
+list< shared_ptr< const Version > > selectBestVersions(
+		const Cache&, const FunctionSelector&, bool binary);
+
+vector< shared_ptr< const Version > > list2vector(list< shared_ptr< const Version > >&&);
 
 #endif
 

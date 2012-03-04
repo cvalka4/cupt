@@ -61,9 +61,10 @@ class VersionSetGetter
 			__cached_all_versions = new FSResult;
 			for (const string& packageName: __get_package_names())
 			{
-				for (auto&& version: __get_package(packageName)->getVersions())
+				// we call getSortedPinnedVersions() to place versions of the same package in the preference order
+				for (auto&& pinnedVersion: __cache.getSortedPinnedVersions(__get_package(packageName)))
 				{
-					__cached_all_versions->emplace_back(std::move(version));
+					__cached_all_versions->emplace_back(std::move(pinnedVersion.version));
 				}
 			}
 		}
@@ -304,7 +305,7 @@ unique_ptr< FS > parseFunctionQuery(const string& query)
 	}
 }
 
-vector< SPCV > selectVersions(const Cache& cache, const FS& functionSelector, bool binary)
+list< SPCV > selectAllVersions(const Cache& cache, const FS& functionSelector, bool binary)
 {
 	VersionSetGetter versionSetGetter(cache, binary);
 	const CommonFS* commonFS = dynamic_cast< const CommonFS* >(&functionSelector);
@@ -312,10 +313,19 @@ vector< SPCV > selectVersions(const Cache& cache, const FS& functionSelector, bo
 	{
 		fatal2i("selectVersion: functionSelector is not an ancestor of CommonFS");
 	}
-	auto selected = commonFS->select(VersionSet(&versionSetGetter));
+	return commonFS->select(VersionSet(&versionSetGetter));
+}
 
-	vector< SPCV > result;
-	std::move(selected.begin(), selected.end(), std::back_inserter(result));
+list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector, bool binary)
+{
+	auto result = selectAllVersions(cache, functionSelector, binary);
+	result.unique([](const SPCV& left, const SPCV& right) { return left->packageName == right->packageName; });
 	return result;
 }
 
+vector< SPCV > list2vector(list< SPCV >&& source)
+{
+	vector< SPCV > result;
+	std::move(source.begin(), source.end(), std::back_inserter(result));
+	return result;
+}
