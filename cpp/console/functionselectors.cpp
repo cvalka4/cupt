@@ -167,6 +167,8 @@ class CommonFS: public FS
 	virtual FSResult select(const Cache&, VersionSet&& from) const = 0;
 };
 
+unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary);
+
 void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
 {
 	if (arguments.size() != n)
@@ -181,7 +183,7 @@ class AlgeFS: public CommonFS
 	list< unique_ptr< CommonFS > > _leaves;
  public:
 	// postcondition: _leaves are not empty
-	AlgeFS(const Arguments& arguments)
+	AlgeFS(bool binary, const Arguments& arguments)
 	{
 		if (arguments.empty())
 		{
@@ -189,8 +191,7 @@ class AlgeFS: public CommonFS
 		}
 		for (const auto& argument: arguments)
 		{
-			auto parsedQuery = parseFunctionQuery(argument);
-			_leaves.push_back(unique_ptr< CommonFS >(static_cast< CommonFS* >(parsedQuery.release())));
+			_leaves.push_back(internalParseFunctionQuery(argument, binary));
 		}
 	}
 };
@@ -198,8 +199,8 @@ class AlgeFS: public CommonFS
 class AndFS: public AlgeFS
 {
  public:
-	AndFS(const Arguments& arguments)
-		: AlgeFS(arguments)
+	AndFS(bool binary, const Arguments& arguments)
+		: AlgeFS(binary, arguments)
 	{}
 	FSResult select(const Cache& cache, VersionSet&& from) const
 	{
@@ -212,11 +213,25 @@ class AndFS: public AlgeFS
 	}
 };
 
+// for determining, is function selector binary or source
+class BinaryTagDummyFS: public CommonFS
+{
+	unique_ptr< CommonFS > __real_fs;
+ public:
+	BinaryTagDummyFS(unique_ptr< CommonFS >&& realFS)
+		: __real_fs(std::move(realFS))
+	{}
+	FSResult select(const Cache& cache, VersionSet&& from) const
+	{
+		return __real_fs->select(cache, std::move(from));
+	}
+};
+
 class OrFS: public AlgeFS
 {
  public:
-	OrFS(const Arguments& arguments)
-		: AlgeFS(arguments)
+	OrFS(bool binary, const Arguments& arguments)
+		: AlgeFS(binary, arguments)
 	{}
 	FSResult select(const Cache& cache, VersionSet&& from) const
 	{
@@ -309,12 +324,12 @@ class RegexMatchFS: public PredicateFS
 	}
 };
 
-FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
+CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
-	CONSTRUCT_FS("and", AndFS(arguments))
-	CONSTRUCT_FS("or", OrFS(arguments))
+	CONSTRUCT_FS("and", AndFS(binary, arguments))
+	CONSTRUCT_FS("or", OrFS(binary, arguments))
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
 	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
@@ -380,9 +395,7 @@ void stripArgumentQuotes(string& argument)
 	}
 }
 
-}
-
-unique_ptr< FS > parseFunctionQuery(const string& query)
+unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary)
 {
 	try
 	{
@@ -406,7 +419,7 @@ unique_ptr< FS > parseFunctionQuery(const string& query)
 		{
 			stripArgumentQuotes(argument);
 		}
-		return unique_ptr< FS >(constructFSByName(functionName, arguments));
+		return unique_ptr< CommonFS >(constructFSByName(functionName, arguments, binary));
 	}
 	catch (Exception&)
 	{
@@ -415,20 +428,34 @@ unique_ptr< FS > parseFunctionQuery(const string& query)
 	}
 }
 
-list< SPCV > selectAllVersions(const Cache& cache, const FS& functionSelector, bool binary)
+}
+
+unique_ptr< FS > parseFunctionQuery(const string& query, bool binary)
 {
-	VersionSetGetter versionSetGetter(cache, binary);
+	auto result = internalParseFunctionQuery(query, binary);
+	if (binary)
+	{
+		unique_ptr< CommonFS > newResult(new BinaryTagDummyFS(std::move(result)));
+		result.swap(newResult);
+	}
+	return std::move(result);
+}
+
+list< SPCV > selectAllVersions(const Cache& cache, const FS& functionSelector)
+{
 	const CommonFS* commonFS = dynamic_cast< const CommonFS* >(&functionSelector);
 	if (!commonFS)
 	{
 		fatal2i("selectVersion: functionSelector is not an ancestor of CommonFS");
 	}
+	bool binary = (dynamic_cast< const BinaryTagDummyFS* >(commonFS));
+	VersionSetGetter versionSetGetter(cache, binary);
 	return commonFS->select(cache, VersionSet(&versionSetGetter));
 }
 
-list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector, bool binary)
+list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector)
 {
-	auto result = selectAllVersions(cache, functionSelector, binary);
+	auto result = selectAllVersions(cache, functionSelector);
 	result.unique([](const SPCV& left, const SPCV& right) { return left->packageName == right->packageName; });
 	return result;
 }

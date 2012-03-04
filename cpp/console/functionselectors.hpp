@@ -34,12 +34,12 @@ class FunctionSelector
 	virtual ~FunctionSelector();
 };
 
-unique_ptr< FunctionSelector > parseFunctionQuery(const string&);
+unique_ptr< FunctionSelector > parseFunctionQuery(const string&, bool);
 
 list< shared_ptr< const Version > > selectAllVersions(
-		const Cache&, const FunctionSelector&, bool binary);
+		const Cache&, const FunctionSelector&);
 list< shared_ptr< const Version > > selectBestVersions(
-		const Cache&, const FunctionSelector&, bool binary);
+		const Cache&, const FunctionSelector&);
 
 vector< shared_ptr< const Version > > list2vector(list< shared_ptr< const Version > >&&);
 

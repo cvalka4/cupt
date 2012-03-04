@@ -291,7 +291,7 @@ vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(share
 	if (isFunctionExpression(packageExpression))
 	{
 		// FIXME: use throwOnError
-		source = list2vector(selectBestVersions(*cache, *parseFunctionQuery(packageExpression), true));
+		source = list2vector(selectBestVersions(*cache, *parseFunctionQuery(packageExpression, true)));
 	}
 	else
 	{
