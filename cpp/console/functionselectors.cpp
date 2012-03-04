@@ -50,6 +50,14 @@ class VersionSetGetter
 		return __binary ? shared_ptr< const Package >(__cache.getBinaryPackage(packageName))
 				: shared_ptr< const Package >(__cache.getSourcePackage(packageName));
 	}
+	void __add_package_to_result(const string& packageName, FSResult* result) const
+	{
+		// we call getSortedPinnedVersions() to place versions of the same package in the preference order
+		for (auto&& pinnedVersion: __cache.getSortedPinnedVersions(__get_package(packageName)))
+		{
+			result->emplace_back(std::move(pinnedVersion.version));
+		}
+	}
  public:
 	explicit VersionSetGetter(const Cache& cache, bool binary)
 		: __binary(binary), __cache(cache), __cached_all_versions(NULL)
@@ -61,11 +69,7 @@ class VersionSetGetter
 			__cached_all_versions = new FSResult;
 			for (const string& packageName: __get_package_names())
 			{
-				// we call getSortedPinnedVersions() to place versions of the same package in the preference order
-				for (auto&& pinnedVersion: __cache.getSortedPinnedVersions(__get_package(packageName)))
-				{
-					__cached_all_versions->emplace_back(std::move(pinnedVersion.version));
-				}
+				__add_package_to_result(packageName, __cached_all_versions);
 			}
 		}
 		return *__cached_all_versions;
@@ -80,10 +84,7 @@ class VersionSetGetter
 			{
 				continue;
 			}
-			for (auto&& version: __get_package(packageName)->getVersions())
-			{
-				result.emplace_back(std::move(version));
-			}
+			__add_package_to_result(packageName, &result);
 		}
 		return result;
 	}
@@ -213,16 +214,17 @@ sregex __parse_regex(const string& input)
 	}
 }
 
+sregex __get_regex_from_arguments(const CommonFS::Arguments& arguments)
+{
+	__require_n_arguments(arguments, 1);
+	return __parse_regex(arguments[0]);
+}
+
 class RegexMatcher
 {
 	sregex __regex;
 	mutable smatch __m;
 
-	static sregex __get_regex_from_arguments(const CommonFS::Arguments& arguments)
-	{
-		__require_n_arguments(arguments, 1);
-		return __parse_regex(arguments[0]);
-	}
  public:
 	RegexMatcher(const CommonFS::Arguments& arguments)
 		: __regex(__get_regex_from_arguments(arguments))
@@ -230,6 +232,19 @@ class RegexMatcher
 	bool match(const string& input) const
 	{
 		return regex_match(input, __m, __regex);
+	}
+};
+
+class PackageNameFS: public CommonFS
+{
+	sregex __regex;
+ public:
+	PackageNameFS(const Arguments& arguments)
+		: __regex(__get_regex_from_arguments(arguments))
+	{}
+	FSResult select(VersionSet&& from) const
+	{
+		return from.get(__regex);
 	}
 };
 
@@ -252,7 +267,7 @@ FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arg
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	CONSTRUCT_FS("and", AndFS(arguments))
-	CONSTRUCT_FS("package", RegexMatchFS([](const SPCV& version) { return version->packageName; }, arguments))
+	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
