@@ -325,18 +325,59 @@ FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arg
 	__builtin_unreachable();
 }
 
-vector< string > split(char delimiter, const string& input)
+vector< string > split(const string& input)
 {
 	vector< string > result;
-	size_t startPosition = 0;
-	size_t position;
-	while (position = input.find(delimiter, startPosition), position != string::npos)
+	size_t argumentStartPosition = 0;
+	size_t position = 0;
+	size_t level = 0;
+	while (position = input.find_first_of(",()/", position), position != string::npos)
 	{
-		result.push_back(input.substr(startPosition, position - startPosition));
-		startPosition = position+1;
+		switch (input[position])
+		{
+			case ',':
+				if (level == 0)
+				{
+					result.push_back(input.substr(argumentStartPosition, position - argumentStartPosition));
+					argumentStartPosition = position+1;
+				}
+				break;
+			case '(':
+				++level;
+				break;
+			case ')':
+				if (level == 0)
+				{
+					fatal2(__("unexpected closing bracket ')' after '%s'"), input.substr(0, position));
+				}
+				--level;
+				break;
+			case '/': // quoting
+				position = input.find('/', position+1);
+				if (position == string::npos)
+				{
+					fatal2(__("unable to find closing quoting character '/'"));
+				}
+		}
+		++position;
 	}
-	result.push_back(input.substr(startPosition, input.size() - startPosition));
+	if (level != 0)
+	{
+		fatal2(__("too few closing brackets"));
+	}
+	result.push_back(input.substr(argumentStartPosition, input.size() - argumentStartPosition));
 	return result;
+}
+
+void stripArgumentQuotes(string& argument)
+{
+	if (argument.size() >= 2)
+	{
+		if (argument.front() == '/' && argument.back() == '/')
+		{
+			argument = argument.substr(1, argument.size()-2);
+		}
+	}
 }
 
 }
@@ -360,7 +401,11 @@ unique_ptr< FS > parseFunctionQuery(const string& query)
 			fatal2(__("the last query character is not a closing bracket ')'"));
 		}
 		string functionName = query.substr(0, argumentsPosition);
-		auto arguments = split(',', query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+		auto arguments = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+		for (string& argument: arguments)
+		{
+			stripArgumentQuotes(argument);
+		}
 		return unique_ptr< FS >(constructFSByName(functionName, arguments));
 	}
 	catch (Exception&)
