@@ -22,11 +22,6 @@
 
 #include "functionselectors.hpp"
 
-typedef FunctionSelector FS;
-typedef shared_ptr< const Version > SPCV;
-typedef list< SPCV > FSResult;
-
-
 FunctionSelector::FunctionSelector()
 {}
 
@@ -34,6 +29,33 @@ FunctionSelector::~FunctionSelector()
 {}
 
 namespace {
+
+typedef FunctionSelector FS;
+typedef shared_ptr< const Version > SPCV;
+typedef list< SPCV > FSResult;
+
+bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
+{
+	if (left->packageName < right->packageName)
+	{
+		return true;
+	}
+	if (left->packageName > right->packageName)
+	{
+		return false;
+	}
+	auto leftPin = cache.getPin(left);
+	auto rightPin = cache.getPin(right);
+	if (leftPin < rightPin)
+	{
+		return true;
+	}
+	if (leftPin > rightPin)
+	{
+		return false;
+	}
+	return left->versionString < right->versionString;
+}
 
 class VersionSetGetter
 {
@@ -43,7 +65,9 @@ class VersionSetGetter
 
 	vector< string > __get_package_names() const
 	{
-		return __binary ? __cache.getBinaryPackageNames() : __cache.getSourcePackageNames();
+		auto result = __binary ? __cache.getBinaryPackageNames() : __cache.getSourcePackageNames();
+		std::sort(result.begin(), result.end());
+		return result;
 	}
 	shared_ptr< const Package > __get_package(const string& packageName) const
 	{
@@ -140,7 +164,7 @@ class CommonFS: public FS
 {
  public:
 	typedef vector< string > Arguments;
-	virtual FSResult select(VersionSet&& from) const = 0;
+	virtual FSResult select(const Cache&, VersionSet&& from) const = 0;
 };
 
 void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
@@ -177,12 +201,34 @@ class AndFS: public AlgeFS
 	AndFS(const Arguments& arguments)
 		: AlgeFS(arguments)
 	{}
-	FSResult select(VersionSet&& from) const
+	FSResult select(const Cache& cache, VersionSet&& from) const
 	{
-		auto result = _leaves.front()->select(std::move(from));
+		auto result = _leaves.front()->select(cache, std::move(from));
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
-			result = (*it)->select(std::move(result));
+			result = (*it)->select(cache, std::move(result));
+		}
+		return result;
+	}
+};
+
+class OrFS: public AlgeFS
+{
+ public:
+	OrFS(const Arguments& arguments)
+		: AlgeFS(arguments)
+	{}
+	FSResult select(const Cache& cache, VersionSet&& from) const
+	{
+		auto result = _leaves.front()->select(cache, VersionSet(from));
+		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
+		{
+			auto part = (*it)->select(cache, VersionSet(from));
+			auto lessPredicate = [&cache](const SPCV& left, const SPCV& right)
+			{
+				return __spcv_less(cache, left, right);
+			};
+			result.merge(part, lessPredicate);
 		}
 		return result;
 	}
@@ -193,7 +239,7 @@ class PredicateFS: public CommonFS
  protected:
 	virtual bool _match(const SPCV& version) const = 0;
  public:
-	FSResult select(VersionSet&& from) const
+	FSResult select(const Cache&, VersionSet&& from) const
 	{
 		FSResult result = from.get();
 		result.remove_if([this](const SPCV& version) { return !this->_match(version); });
@@ -242,7 +288,7 @@ class PackageNameFS: public CommonFS
 	PackageNameFS(const Arguments& arguments)
 		: __regex(__get_regex_from_arguments(arguments))
 	{}
-	FSResult select(VersionSet&& from) const
+	FSResult select(const Cache&, VersionSet&& from) const
 	{
 		return from.get(__regex);
 	}
@@ -268,6 +314,7 @@ FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arg
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
 	CONSTRUCT_FS("and", AndFS(arguments))
+	CONSTRUCT_FS("or", OrFS(arguments))
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
 	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
@@ -331,7 +378,7 @@ list< SPCV > selectAllVersions(const Cache& cache, const FS& functionSelector, b
 	{
 		fatal2i("selectVersion: functionSelector is not an ancestor of CommonFS");
 	}
-	return commonFS->select(VersionSet(&versionSetGetter));
+	return commonFS->select(cache, VersionSet(&versionSetGetter));
 }
 
 list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector, bool binary)
