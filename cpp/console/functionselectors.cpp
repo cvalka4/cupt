@@ -17,6 +17,7 @@
 **************************************************************************/
 #include <common/regex.hpp>
 
+#include <cupt/cache/releaseinfo.hpp>
 #include <cupt/cache/binarypackage.hpp>
 #include <cupt/cache/sourcepackage.hpp>
 #include <cupt/cache/binaryversion.hpp>
@@ -325,6 +326,28 @@ class RegexMatchFS: public PredicateFS
 	}
 };
 
+class SourceRegexMatchFS: public PredicateFS
+{
+	std::function< string (const Version::Source&) > __get_source_attribute;
+	RegexMatcher __regex_matcher;
+ public:
+	SourceRegexMatchFS(decltype(__get_source_attribute) getter, const Arguments& arguments)
+		: __get_source_attribute(getter), __regex_matcher(arguments)
+	{}
+ protected:
+	bool _match(const SPCV& version) const
+	{
+		for (const auto& source: version->sources)
+		{
+			if (__regex_matcher.match(__get_source_attribute(source)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
 class OtherFieldRegexMatchFS: public RegexMatchFS
 {
 	string __field_name;
@@ -361,6 +384,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
+	#define VERSION_RELEASE_MEMBER(member) [](const Version::Source& source) { return source.release-> member; }
 	#define BINARY_VERSION_MEMBER(member) [](const SPCV& version) \
 			{ return static_cast< const BinaryVersion* >(version.get())-> member; }
 
@@ -376,6 +400,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 			, arguments))
 	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
 	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
+	CONSTRUCT_FS("archive", SourceRegexMatchFS(VERSION_RELEASE_MEMBER(archive), arguments))
 	// binary
 	CONSTRUCT_FS("sourcepackage", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
