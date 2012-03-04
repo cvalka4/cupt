@@ -382,11 +382,13 @@ class OtherFieldRegexMatchFS: public RegexMatchFS
 
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
 {
-	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
 	#define VERSION_RELEASE_MEMBER(member) [](const Version::Source& source) { return source.release-> member; }
 	#define BINARY_VERSION_MEMBER(member) [](const SPCV& version) \
 			{ return static_cast< const BinaryVersion* >(version.get())-> member; }
+	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
+	#define CONSTRUCT_RELEASE_MEMBER_FS(name, member) \
+			CONSTRUCT_FS(name, SourceRegexMatchFS(VERSION_RELEASE_MEMBER(member), arguments))
 
 	// logic
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
@@ -400,7 +402,9 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 			, arguments))
 	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
 	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
-	CONSTRUCT_FS("archive", SourceRegexMatchFS(VERSION_RELEASE_MEMBER(archive), arguments))
+	CONSTRUCT_RELEASE_MEMBER_FS("archive", archive)
+	CONSTRUCT_RELEASE_MEMBER_FS("codename", codename)
+	CONSTRUCT_RELEASE_MEMBER_FS("component", component)
 	// binary
 	CONSTRUCT_FS("sourcepackage", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
