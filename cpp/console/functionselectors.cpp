@@ -406,6 +406,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_RELEASE_MEMBER_FS("codename", codename)
 	CONSTRUCT_RELEASE_MEMBER_FS("component", component)
 	CONSTRUCT_RELEASE_MEMBER_FS("release-version", version)
+	CONSTRUCT_RELEASE_MEMBER_FS("vendor", vendor)
 	// binary
 	CONSTRUCT_FS("source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
