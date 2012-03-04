@@ -19,6 +19,7 @@
 
 #include <cupt/cache/binarypackage.hpp>
 #include <cupt/cache/sourcepackage.hpp>
+#include <cupt/cache/binaryversion.hpp>
 
 #include "functionselectors.hpp"
 
@@ -324,18 +325,27 @@ class RegexMatchFS: public PredicateFS
 	}
 };
 
+///
+
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
+	#define BINARY_VERSION_MEMBER(member) [](const SPCV& version) \
+			{ return static_cast< const BinaryVersion* >(version.get())-> member; }
+
+	// logic
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
+	// common
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
 	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
 	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
+	// binary
+	CONSTRUCT_FS("sourcepackage", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
 	__builtin_unreachable();
 }
