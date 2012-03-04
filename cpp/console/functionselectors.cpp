@@ -266,8 +266,11 @@ class RegexMatchFS: public PredicateFS
 FS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments)
 {
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
+	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
 	CONSTRUCT_FS("and", AndFS(arguments))
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
+	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
+	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
 	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
