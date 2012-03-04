@@ -280,7 +280,7 @@ vector< string > split(char delimiter, const string& input)
 	vector< string > result;
 	size_t startPosition = 0;
 	size_t position;
-	while (position = input.find(startPosition, delimiter), position != string::npos)
+	while (position = input.find(delimiter, startPosition), position != string::npos)
 	{
 		result.push_back(input.substr(startPosition, position - startPosition));
 		startPosition = position+1;
