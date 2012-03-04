@@ -325,6 +325,36 @@ class RegexMatchFS: public PredicateFS
 	}
 };
 
+class OtherFieldRegexMatchFS: public RegexMatchFS
+{
+	string __field_name;
+	static string __extract_second_argument(const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 2);
+		return arguments[1];
+	}
+ public:
+	OtherFieldRegexMatchFS(const Arguments& arguments)
+		: RegexMatchFS([this](const SPCV& version) -> string
+				{
+					if (!version->others)
+					{
+						return string();
+					}
+					auto it = version->others->find(this->__field_name);
+					if (it != version->others->end())
+					{
+						return it->second;
+					}
+					else
+					{
+						return string();
+					}
+				}, { __extract_second_argument(arguments) }),
+		__field_name(arguments[0])
+	{}
+};
+
 ///
 
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
@@ -345,6 +375,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
 	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
+	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
 	// binary
 	CONSTRUCT_FS("sourcepackage", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
