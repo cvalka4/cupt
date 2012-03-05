@@ -326,6 +326,7 @@ static vector< string > getSourcePackageNames(shared_ptr< const Cache > cache)
 vector< shared_ptr< const SourceVersion > > selectSourceVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression, bool throwOnError)
 {
+	// FIXME: use also function selectors
 	auto versionSelector =
 			[](shared_ptr< const Cache > cache, const string& packageName, bool throwOnError) -> shared_ptr< const Version >
 			{
@@ -352,6 +353,7 @@ vector< shared_ptr< const SourceVersion > > selectSourceVersionsWildcarded(share
 vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression)
 {
+	// FIXME: use also function selectors
 	vector< shared_ptr< const BinaryVersion > > result;
 
 	auto packageNames = __select_package_names_wildcarded(cache, packageExpression, getBinaryPackageNames);
@@ -372,6 +374,7 @@ vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(sh
 vector< shared_ptr< const SourceVersion > > selectAllSourceVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression)
 {
+	// FIXME: use also function selectors
 	vector< shared_ptr< const SourceVersion > > result;
 
 	auto packageNames = __select_package_names_wildcarded(cache, packageExpression, getSourcePackageNames);
