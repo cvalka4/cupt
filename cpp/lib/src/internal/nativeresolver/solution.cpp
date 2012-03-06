@@ -214,12 +214,55 @@ void SolutionStorage::setRejection(Solution& solution, const dg::Element* elemen
 
 	packageEntry.rejectedConflictors.push_front(elementPtr);
 	setPackageEntry(solution, conflictingElementPtr,
-			std::move(packageEntry), NULL);
+			std::move(packageEntry), NULL, -1);
+}
+
+void SolutionStorage::__update_broken_successors(Solution& solution,
+		const dg::Element* oldElementPtr, const dg::Element* newElementPtr, size_t priority)
+{
+	if (priority == (size_t)-1)
+	{
+		return;
+	}
+
+	if (oldElementPtr)
+	{ // invalidate those which depend on the old element
+		const GraphCessorListType& predecessors = getPredecessorElements(oldElementPtr);
+		FORIT(predecessorElementPtrIt, predecessors)
+		{
+			for (auto reverseDependencyPtr: getPredecessorElements(*predecessorElementPtrIt))
+			{
+				if (solution.getPackageEntry(reverseDependencyPtr))
+				{
+					// yes, the predecessor belongs to the solution
+					if (!verifyElement(solution, *predecessorElementPtrIt))
+					{
+						// here we assume brokenSuccessors didn't
+						// contain predecessorElementPtr, since as old element was
+						// present, predecessorElementPtr was not broken
+						solution.__broken_successors.push_front(
+								BrokenSuccessor(*predecessorElementPtrIt, priority));
+					}
+				}
+			}
+		}
+	}
+	{ // validate those which depend on the new element
+		const GraphCessorListType& predecessors = getPredecessorElements(newElementPtr);
+		FORIT(predecessorElementPtrIt, predecessors)
+		{
+			solution.__broken_successors.remove_if(
+					[predecessorElementPtrIt](const BrokenSuccessor& brokenSuccessor)
+					{
+						return brokenSuccessor.elementPtr == *predecessorElementPtrIt;
+					});
+		}
+	}
 }
 
 void SolutionStorage::setPackageEntry(Solution& solution,
 		const dg::Element* elementPtr, PackageEntry&& packageEntry,
-		const dg::Element* conflictingElementPtr)
+		const dg::Element* conflictingElementPtr, size_t priority)
 {
 	__dependency_graph.unfoldElement(elementPtr);
 
@@ -251,6 +294,8 @@ void SolutionStorage::setPackageEntry(Solution& solution,
 		}
 		it->second = std::move(packageEntry);
 	}
+
+	__update_broken_successors(solution, elementPtr, conflictingElementPtr, priority);
 }
 
 void SolutionStorage::prepareForResolving(Solution& initialSolution,
@@ -259,6 +304,7 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 {
 	auto source = __dependency_graph.fill(oldPackages, initialPackages);
 
+	/*
 	auto comparator = [](const pair< const dg::Element*, PackageEntry >& left,
 			const pair< const dg::Element*, PackageEntry >& right)
 	{
@@ -271,6 +317,12 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 	{
 		__dependency_graph.unfoldElement(it->first);
 		initialSolution.__added_entries->push_back(*it);
+	}
+	*/
+	for (auto&& entry: source)
+	{
+		__dependency_graph.unfoldElement(entry.first);
+		setPackageEntry(initialSolution, entry.first, std::move(entry.second), NULL, 0);
 	}
 }
 
@@ -419,81 +471,9 @@ vector< const dg::Element* > Solution::getElements() const
 	return result;
 }
 
-void Solution::getBrokenPairs(const std::function< void (BrokenPairType&&) >& callback) const
+const forward_list< BrokenSuccessor >& Solution::getBrokenSuccessors() const
 {
-	auto isEligible = [](PackageEntryMap::const_iterator_t it) -> bool
-	{
-		return !it->second.brokenSuccessors.empty();
-	};
-	auto processEntry = [this, &isEligible, &callback](PackageEntryMap::const_iterator_t it)
-	{
-		if (__removed_entries->find(it->first) == __removed_entries->end())
-		{
-			FORIT(brokenSuccessorIt, it->second.brokenSuccessors)
-			{
-				callback(make_pair(it->first, *brokenSuccessorIt));
-			}
-		}
-	};
-
-	auto masterIt = __master_entries ? __master_entries->begin() : __added_entries->end();
-	auto masterEnd = __master_entries ? __master_entries->end() : __added_entries->end();
-	auto ownIt = __added_entries->begin();
-	auto ownEnd = __added_entries->end();
-
-	--masterIt;
-	--ownIt;
-	{
-		goto both;
-	compare:
-		// speeding up a bit, usually most of masterIt won't be included anyway
-		if (!isEligible(masterIt))
-		{
-			goto master;
-		}
-		if (masterIt->first < ownIt->first)
-		{
-			processEntry(masterIt);
-			goto master;
-		}
-		else if (masterIt->first > ownIt->first)
-		{
-			processEntry(ownIt);
-			goto own;
-		}
-		else // equal keys
-		{
-			// own entry overrides master entry
-			processEntry(ownIt);
-			goto both;
-		}
-	both:
-		++masterIt;
-		++ownIt;
-		if (masterIt != masterEnd)
-		{
-			if (ownIt != ownEnd) goto compare; else goto only_master;
-		}
-		else
-		{
-			if (ownIt != ownEnd) goto only_own; else goto end;
-		}
-	master:
-		++masterIt;
-		if (masterIt != masterEnd) goto compare; else goto only_own;
-	own:
-		++ownIt;
-		if (ownIt != ownEnd) goto compare; else goto only_master;
-	only_master:
-		processEntry(masterIt);
-		++masterIt;
-		if (masterIt != masterEnd) goto only_master; else goto end;
-	only_own:
-		processEntry(ownIt);
-		++ownIt;
-		if (ownIt != ownEnd) goto only_own; else goto end;
-	end:;
-	}
+	return __broken_successors;
 }
 
 const PackageEntry* Solution::getPackageEntry(const dg::Element* elementPtr) const
