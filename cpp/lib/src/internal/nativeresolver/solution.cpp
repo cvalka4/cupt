@@ -225,6 +225,20 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		return;
 	}
 
+	// check direct dependencies of the new element
+	for (auto successorPtr: getSuccessorElements(newElementPtr))
+	{
+		auto predicate = [successorPtr](const BrokenSuccessor& bs) { return bs.elementPtr == successorPtr; };
+		if (std::find_if(solution.__broken_successors.begin(), solution.__broken_successors.end(), predicate) ==
+				solution.__broken_successors.end())
+		{
+			if (!verifyElement(solution, successorPtr))
+			{
+				solution.__broken_successors.push_front(BrokenSuccessor(successorPtr, priority));
+			}
+		}
+	}
+
 	if (oldElementPtr)
 	{ // invalidate those which depend on the old element
 		const GraphCessorListType& predecessors = getPredecessorElements(oldElementPtr);
