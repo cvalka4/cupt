@@ -335,7 +335,8 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 	*/
 	for (auto&& entry: source)
 	{
-		setPackageEntry(initialSolution, entry.first, std::move(entry.second), NULL, 0);
+		setPackageEntry(initialSolution, entry.first, std::move(entry.second),
+				(__dependency_graph).getCorrespondingEmptyElement(entry.first), 0);
 	}
 }
 
