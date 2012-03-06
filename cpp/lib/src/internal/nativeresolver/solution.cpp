@@ -295,7 +295,7 @@ void SolutionStorage::setPackageEntry(Solution& solution,
 		it->second = std::move(packageEntry);
 	}
 
-	__update_broken_successors(solution, elementPtr, conflictingElementPtr, priority);
+	__update_broken_successors(solution, conflictingElementPtr, elementPtr, priority);
 }
 
 void SolutionStorage::prepareForResolving(Solution& initialSolution,
@@ -321,7 +321,6 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 	*/
 	for (auto&& entry: source)
 	{
-		__dependency_graph.unfoldElement(entry.first);
 		setPackageEntry(initialSolution, entry.first, std::move(entry.second), NULL, 0);
 	}
 }

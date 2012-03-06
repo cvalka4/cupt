@@ -860,10 +860,14 @@ BrokenPairType __get_broken_pair(const SolutionStorage& solutionStorage,
 	};
 
 	const auto& brokenSuccessors = solution.getBrokenSuccessors();
-	auto bestBrokenSuccessor = *std::max_element(
+	auto bestBrokenSuccessorIt = std::max_element(
 			brokenSuccessors.begin(), brokenSuccessors.end(), compareBrokenSuccessors);
-	BrokenPairType result(NULL, bestBrokenSuccessor); // empty
-	for (auto reverseDependencyPtr: solutionStorage.getPredecessorElements(bestBrokenSuccessor.elementPtr))
+	if (bestBrokenSuccessorIt == brokenSuccessors.end())
+	{
+		return BrokenPairType{ NULL, {} };
+	}
+	BrokenPairType result(NULL, *bestBrokenSuccessorIt);
+	for (auto reverseDependencyPtr: solutionStorage.getPredecessorElements(bestBrokenSuccessorIt->elementPtr))
 	{
 		if (solution.getPackageEntry(reverseDependencyPtr))
 		{
