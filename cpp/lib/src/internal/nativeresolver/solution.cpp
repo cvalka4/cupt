@@ -272,6 +272,13 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 					});
 		}
 	}
+
+	vector< string > bsStrings;
+	for (const auto& brokenSuccessor: solution.__broken_successors)
+	{
+		bsStrings.push_back(brokenSuccessor.elementPtr->toString());
+	}
+	debug2("broken successors: %s", join(", ", bsStrings));
 }
 
 void SolutionStorage::setPackageEntry(Solution& solution,
@@ -456,6 +463,7 @@ void Solution::prepare()
 	}
 
 	insertedElementPtrs = __parent->insertedElementPtrs;
+	__broken_successors = __parent->__broken_successors;
 	__parent.reset();
 }
 
