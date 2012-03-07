@@ -217,6 +217,11 @@ void SolutionStorage::setRejection(Solution& solution, const dg::Element* elemen
 			std::move(packageEntry), NULL, -1);
 }
 
+std::function< bool (const BrokenSuccessor&) > generateEqualPredicate(const dg::Element* elementPtr)
+{
+	return [elementPtr](const BrokenSuccessor& bs) { return bs.elementPtr == elementPtr; };
+}
+
 void SolutionStorage::__update_broken_successors(Solution& solution,
 		const dg::Element* oldElementPtr, const dg::Element* newElementPtr, size_t priority)
 {
@@ -226,10 +231,6 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	}
 
 	auto& bss = solution.__broken_successors;
-	auto generateEqualPredicate = [](const dg::Element* elementPtr)
-	{
-		return [elementPtr](const BrokenSuccessor& bs) { return bs.elementPtr == elementPtr; };
-	};
 
 	// check direct dependencies of the old element
 	for (auto successorPtr: getSuccessorElements(oldElementPtr))
@@ -282,7 +283,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		const GraphCessorListType& predecessors = getPredecessorElements(newElementPtr);
 		FORIT(predecessorElementPtrIt, predecessors)
 		{
-			solution.__broken_successors.remove_if(generateEqualPredicate(*predecessorElementPtrIt));
+			bss.remove_if(generateEqualPredicate(*predecessorElementPtrIt));
 		}
 	}
 
