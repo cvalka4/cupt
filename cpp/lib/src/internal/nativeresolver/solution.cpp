@@ -238,7 +238,6 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		}
 		return false;
 	};
-
 	class BrokenSuccessorElementEqual
 	{
 		const dg::Element* __element_ptr;
@@ -251,25 +250,34 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 			return bs.elementPtr == __element_ptr;
 		}
 	};
+	auto isPresent = [](const GraphCessorListType& container, const dg::Element* elementPtr)
+	{
+		return std::find(container.begin(), container.end(), elementPtr) != container.end();
+	};
 
-	if (oldElementPtr)
-	{ // check direct dependencies of the old element
-		for (auto successorPtr: getSuccessorElements(oldElementPtr))
+	static const GraphCessorListType nullList;
+
+	const auto& successorsOfOld = oldElementPtr ? getSuccessorElements(oldElementPtr) : nullList;
+	const auto& successorsOfNew = getSuccessorElements(newElementPtr);
+	// check direct dependencies of the old element
+	for (auto successorPtr: successorsOfOld)
+	{
+		if (isPresent(successorsOfNew, successorPtr)) continue;
+
+		auto predicate = BrokenSuccessorElementEqual(successorPtr);
+		if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
 		{
-			auto predicate = BrokenSuccessorElementEqual(successorPtr);
-			if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
+			if (!reverseDependencyExists(successorPtr))
 			{
-				if (!reverseDependencyExists(successorPtr))
-				{
-					bss.remove_if(predicate);
-				}
+				bss.remove_if(predicate);
 			}
 		}
 	}
-
 	// check direct dependencies of the new element
-	for (auto successorPtr: getSuccessorElements(newElementPtr))
+	for (auto successorPtr: successorsOfNew)
 	{
+		if (isPresent(successorsOfOld, successorPtr)) continue;
+
 		if (std::find_if(bss.begin(), bss.end(), BrokenSuccessorElementEqual(successorPtr)) == bss.end())
 		{
 			if (!verifyElement(solution, successorPtr))
@@ -279,29 +287,30 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		}
 	}
 
-	if (oldElementPtr)
-	{ // invalidate those which depend on the old element
-		const GraphCessorListType& predecessors = getPredecessorElements(oldElementPtr);
-		FORIT(predecessorElementPtrIt, predecessors)
+	const auto& predecessorsOfOld = oldElementPtr ? getPredecessorElements(oldElementPtr) : nullList;
+	const auto& predecessorsOfNew = getPredecessorElements(newElementPtr);
+	// invalidate those which depend on the old element
+	for (auto predecessorElementPtr: predecessorsOfOld)
+	{
+		if (isPresent(predecessorsOfNew, predecessorElementPtr)) continue;
+
+		if (reverseDependencyExists(predecessorElementPtr))
 		{
-			if (reverseDependencyExists(*predecessorElementPtrIt))
+			if (!verifyElement(solution, predecessorElementPtr))
 			{
-				if (!verifyElement(solution, *predecessorElementPtrIt))
-				{
-					// here we assume brokenSuccessors didn't
-					// contain predecessorElementPtr, since as old element was
-					// present, predecessorElementPtr was not broken
-					bss.push_front(BrokenSuccessor(*predecessorElementPtrIt, priority));
-				}
+				// here we assume brokenSuccessors didn't
+				// contain predecessorElementPtr, since as old element was
+				// present, predecessorElementPtr was not broken
+				bss.push_front(BrokenSuccessor(predecessorElementPtr, priority));
 			}
 		}
 	}
-	{ // validate those which depend on the new element
-		const GraphCessorListType& predecessors = getPredecessorElements(newElementPtr);
-		FORIT(predecessorElementPtrIt, predecessors)
-		{
-			bss.remove_if(BrokenSuccessorElementEqual(*predecessorElementPtrIt));
-		}
+	// validate those which depend on the new element
+	for (auto predecessorElementPtr: predecessorsOfNew)
+	{
+		if (isPresent(predecessorsOfOld, predecessorElementPtr)) continue;
+
+		bss.remove_if(BrokenSuccessorElementEqual(predecessorElementPtr));
 	}
 
 	/*
