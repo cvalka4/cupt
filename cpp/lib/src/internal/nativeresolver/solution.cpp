@@ -217,11 +217,6 @@ void SolutionStorage::setRejection(Solution& solution, const dg::Element* elemen
 			std::move(packageEntry), NULL, -1);
 }
 
-std::function< bool (const BrokenSuccessor&) > generateEqualPredicate(const dg::Element* elementPtr)
-{
-	return [elementPtr](const BrokenSuccessor& bs) { return bs.elementPtr == elementPtr; };
-}
-
 void SolutionStorage::__update_broken_successors(Solution& solution,
 		const dg::Element* oldElementPtr, const dg::Element* newElementPtr, size_t priority)
 {
@@ -244,11 +239,24 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		return false;
 	};
 
+	class BrokenSuccessorElementEqual
+	{
+		const dg::Element* __element_ptr;
+	 public:
+		BrokenSuccessorElementEqual(const dg::Element* elementPtr)
+			: __element_ptr(elementPtr)
+		{}
+		bool operator()(const BrokenSuccessor& bs)
+		{
+			return bs.elementPtr == __element_ptr;
+		}
+	};
+
 	if (oldElementPtr)
 	{ // check direct dependencies of the old element
 		for (auto successorPtr: getSuccessorElements(oldElementPtr))
 		{
-			auto predicate = generateEqualPredicate(successorPtr);
+			auto predicate = BrokenSuccessorElementEqual(successorPtr);
 			if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
 			{
 				if (!reverseDependencyExists(successorPtr))
@@ -262,7 +270,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	// check direct dependencies of the new element
 	for (auto successorPtr: getSuccessorElements(newElementPtr))
 	{
-		if (std::find_if(bss.begin(), bss.end(), generateEqualPredicate(successorPtr)) == bss.end())
+		if (std::find_if(bss.begin(), bss.end(), BrokenSuccessorElementEqual(successorPtr)) == bss.end())
 		{
 			if (!verifyElement(solution, successorPtr))
 			{
@@ -292,7 +300,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		const GraphCessorListType& predecessors = getPredecessorElements(newElementPtr);
 		FORIT(predecessorElementPtrIt, predecessors)
 		{
-			bss.remove_if(generateEqualPredicate(*predecessorElementPtrIt));
+			bss.remove_if(BrokenSuccessorElementEqual(*predecessorElementPtrIt));
 		}
 	}
 
