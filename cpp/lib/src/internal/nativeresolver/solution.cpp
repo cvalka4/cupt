@@ -232,15 +232,29 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 
 	auto& bss = solution.__broken_successors;
 
-	// check direct dependencies of the old element
-	for (auto successorPtr: getSuccessorElements(oldElementPtr))
+	auto reverseDependencyExists = [this, &solution](const dg::Element* elementPtr)
 	{
-		auto predicate = generateEqualPredicate(successorPtr);
-		if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
+		for (auto reverseDependencyPtr: getPredecessorElements(elementPtr))
 		{
-			if (verifyElement(solution, successorPtr))
+			if (solution.getPackageEntry(reverseDependencyPtr))
 			{
-				bss.remove_if(predicate);
+				return true;
+			}
+		}
+		return false;
+	};
+
+	if (oldElementPtr)
+	{ // check direct dependencies of the old element
+		for (auto successorPtr: getSuccessorElements(oldElementPtr))
+		{
+			auto predicate = generateEqualPredicate(successorPtr);
+			if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
+			{
+				if (!reverseDependencyExists(successorPtr))
+				{
+					bss.remove_if(predicate);
+				}
 			}
 		}
 	}
@@ -262,19 +276,14 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		const GraphCessorListType& predecessors = getPredecessorElements(oldElementPtr);
 		FORIT(predecessorElementPtrIt, predecessors)
 		{
-			for (auto reverseDependencyPtr: getPredecessorElements(*predecessorElementPtrIt))
+			if (reverseDependencyExists(*predecessorElementPtrIt))
 			{
-				if (solution.getPackageEntry(reverseDependencyPtr))
+				if (!verifyElement(solution, *predecessorElementPtrIt))
 				{
-					// yes, the predecessor belongs to the solution
-					if (!verifyElement(solution, *predecessorElementPtrIt))
-					{
-						// here we assume brokenSuccessors didn't
-						// contain predecessorElementPtr, since as old element was
-						// present, predecessorElementPtr was not broken
-						bss.push_front(BrokenSuccessor(*predecessorElementPtrIt, priority));
-						break;
-					}
+					// here we assume brokenSuccessors didn't
+					// contain predecessorElementPtr, since as old element was
+					// present, predecessorElementPtr was not broken
+					bss.push_front(BrokenSuccessor(*predecessorElementPtrIt, priority));
 				}
 			}
 		}
