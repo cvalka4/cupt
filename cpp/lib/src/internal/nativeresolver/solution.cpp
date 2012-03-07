@@ -225,12 +225,29 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		return;
 	}
 
+	auto& bss = solution.__broken_successors;
+	auto generateEqualPredicate = [](const dg::Element* elementPtr)
+	{
+		return [elementPtr](const BrokenSuccessor& bs) { return bs.elementPtr == elementPtr; };
+	};
+
+	// check direct dependencies of the old element
+	for (auto successorPtr: getSuccessorElements(oldElementPtr))
+	{
+		auto predicate = generateEqualPredicate(successorPtr);
+		if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
+		{
+			if (verifyElement(solution, successorPtr))
+			{
+				solution.remove_if(predicate);
+			}
+		}
+	}
+
 	// check direct dependencies of the new element
 	for (auto successorPtr: getSuccessorElements(newElementPtr))
 	{
-		auto predicate = [successorPtr](const BrokenSuccessor& bs) { return bs.elementPtr == successorPtr; };
-		if (std::find_if(solution.__broken_successors.begin(), solution.__broken_successors.end(), predicate) ==
-				solution.__broken_successors.end())
+		if (std::find_if(bss.begin(), bss.end(), generateEqualPredicate(successorPtr)) == bss.end())
 		{
 			if (!verifyElement(solution, successorPtr))
 			{
@@ -256,6 +273,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 						// present, predecessorElementPtr was not broken
 						solution.__broken_successors.push_front(
 								BrokenSuccessor(*predecessorElementPtrIt, priority));
+						break;
 					}
 				}
 			}
@@ -265,11 +283,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		const GraphCessorListType& predecessors = getPredecessorElements(newElementPtr);
 		FORIT(predecessorElementPtrIt, predecessors)
 		{
-			solution.__broken_successors.remove_if(
-					[predecessorElementPtrIt](const BrokenSuccessor& brokenSuccessor)
-					{
-						return brokenSuccessor.elementPtr == *predecessorElementPtrIt;
-					});
+			solution.__broken_successors.remove_if(generateEqualPredicate(*predecessorElementPtrIt));
 		}
 	}
 

@@ -879,6 +879,11 @@ BrokenPairType __get_broken_pair(const SolutionStorage& solutionStorage,
 			}
 		}
 	}
+	if (!result.first)
+	{
+		fatal2i("__get_broken_pair: no existing in the solution predecessors for the broken successor '%s'",
+				bestBrokenSuccessorIt->elementPtr->toString());
+	}
 
 	return result;
 }
