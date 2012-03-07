@@ -239,7 +239,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		{
 			if (verifyElement(solution, successorPtr))
 			{
-				solution.remove_if(predicate);
+				bss.remove_if(predicate);
 			}
 		}
 	}
@@ -251,7 +251,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		{
 			if (!verifyElement(solution, successorPtr))
 			{
-				solution.__broken_successors.push_front(BrokenSuccessor(successorPtr, priority));
+				bss.push_front(BrokenSuccessor(successorPtr, priority));
 			}
 		}
 	}
@@ -271,8 +271,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 						// here we assume brokenSuccessors didn't
 						// contain predecessorElementPtr, since as old element was
 						// present, predecessorElementPtr was not broken
-						solution.__broken_successors.push_front(
-								BrokenSuccessor(*predecessorElementPtrIt, priority));
+						bss.push_front(BrokenSuccessor(*predecessorElementPtrIt, priority));
 						break;
 					}
 				}
