@@ -367,7 +367,6 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 {
 	auto source = __dependency_graph.fill(oldPackages, initialPackages);
 
-	/*
 	auto comparator = [](const pair< const dg::Element*, PackageEntry >& left,
 			const pair< const dg::Element*, PackageEntry >& right)
 	{
@@ -381,11 +380,9 @@ void SolutionStorage::prepareForResolving(Solution& initialSolution,
 		__dependency_graph.unfoldElement(it->first);
 		initialSolution.__added_entries->push_back(*it);
 	}
-	*/
-	for (auto&& entry: source)
+	for (const auto& entry: *initialSolution.__added_entries)
 	{
-		setPackageEntry(initialSolution, entry.first, std::move(entry.second),
-				(__dependency_graph).getCorrespondingEmptyElement(entry.first), 0);
+		__update_broken_successors(initialSolution, NULL, entry.first, 0);
 	}
 }
 
