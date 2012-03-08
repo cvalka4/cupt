@@ -76,6 +76,7 @@ struct PackageEntry
 
 class PackageEntryMap;
 class PackageEntrySet;
+class BrokenSuccessorMap;
 
 struct BrokenSuccessor
 {
@@ -97,7 +98,7 @@ class Solution
 	shared_ptr< const PackageEntryMap > __master_entries;
 	shared_ptr< PackageEntryMap > __added_entries;
 	shared_ptr< PackageEntrySet > __removed_entries;
-	forward_list< BrokenSuccessor > __broken_successors;
+	BrokenSuccessorMap*  __broken_successors;
  public:
 	size_t id;
 	size_t level;
@@ -109,11 +110,12 @@ class Solution
 	Solution();
 	Solution(const Solution&) = delete;
 	Solution& operator=(const Solution&) = delete;
+	~Solution();
 
 	void prepare();
 	vector< const dg::Element* > getElements() const;
 
-	const forward_list< BrokenSuccessor >& getBrokenSuccessors() const;
+	const vector< BrokenSuccessor >& getBrokenSuccessors() const;
 	// result becomes invalid after any setPackageEntry
 	const PackageEntry* getPackageEntry(const dg::Element*) const;
 };

@@ -39,6 +39,7 @@ bool PackageEntry::isModificationAllowed(const dg::Element* elementPtr) const
 }
 
 template < class data_t, class Comparator, class KeyGetter >
+// TODO: rename to VectorBasedMap
 class PackageEntryMapBase
 {
  public:
@@ -90,6 +91,10 @@ class PackageEntryMapBase
 	{
 		__container.push_back(data);
 	}
+	const container_t& getContainer() const
+	{
+		return __container;
+	}
 };
 
 struct PackageEntryMapComparator
@@ -124,8 +129,22 @@ struct PackageEntrySetKeyGetter
 {
 	const dg::Element* operator()(const dg::Element* data) { return data; }
 };
+// TODO: rename to ElementSet
 class PackageEntrySet: public PackageEntryMapBase< const dg::Element*,
 		PackageEntrySetComparator, PackageEntrySetKeyGetter >
+{};
+
+struct BrokenSuccessorMapComparator
+{
+	bool operator()(const BrokenSuccessor& data, const dg::Element* key) const
+	{ return data.elementPtr < key; }
+};
+struct BrokenSuccessorMapKeyGetter
+{
+	const dg::Element* operator()(const BrokenSuccessor& data) { return data.elementPtr; }
+};
+class BrokenSuccessorMap: public PackageEntryMapBase< BrokenSuccessor,
+		BrokenSuccessorMapComparator, BrokenSuccessorMapKeyGetter >
 {};
 
 
@@ -225,7 +244,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 		return;
 	}
 
-	auto& bss = solution.__broken_successors;
+	auto& bss = *solution.__broken_successors;
 
 	auto reverseDependencyExists = [this, &solution](const dg::Element* elementPtr)
 	{
@@ -237,18 +256,6 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 			}
 		}
 		return false;
-	};
-	class BrokenSuccessorElementEqual
-	{
-		const dg::Element* __element_ptr;
-	 public:
-		BrokenSuccessorElementEqual(const dg::Element* elementPtr)
-			: __element_ptr(elementPtr)
-		{}
-		bool operator()(const BrokenSuccessor& bs)
-		{
-			return bs.elementPtr == __element_ptr;
-		}
 	};
 	auto isPresent = [](const GraphCessorListType& container, const dg::Element* elementPtr)
 	{
@@ -264,12 +271,12 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	{
 		if (isPresent(successorsOfNew, successorPtr)) continue;
 
-		auto predicate = BrokenSuccessorElementEqual(successorPtr);
-		if (std::find_if(bss.begin(), bss.end(), predicate) != bss.end())
+		auto it = bss.find(successorPtr);
+		if (it != bss.end())
 		{
 			if (!reverseDependencyExists(successorPtr))
 			{
-				bss.remove_if(predicate);
+				bss.erase(it);
 			}
 		}
 	}
@@ -278,11 +285,12 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	{
 		if (isPresent(successorsOfOld, successorPtr)) continue;
 
-		if (std::find_if(bss.begin(), bss.end(), BrokenSuccessorElementEqual(successorPtr)) == bss.end())
+		auto it = bss.lower_bound(successorPtr);
+		if (it == bss.end() || it->elementPtr != successorPtr)
 		{
 			if (!verifyElement(solution, successorPtr))
 			{
-				bss.push_front(BrokenSuccessor(successorPtr, priority));
+				bss.insert(it, BrokenSuccessor(successorPtr, priority));
 			}
 		}
 	}
@@ -301,7 +309,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 				// here we assume brokenSuccessors didn't
 				// contain predecessorElementPtr, since as old element was
 				// present, predecessorElementPtr was not broken
-				bss.push_front(BrokenSuccessor(predecessorElementPtr, priority));
+				bss.insert(bss.lower_bound(predecessorElementPtr), BrokenSuccessor(predecessorElementPtr, priority));
 			}
 		}
 	}
@@ -310,7 +318,11 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	{
 		if (isPresent(predecessorsOfOld, predecessorElementPtr)) continue;
 
-		bss.remove_if(BrokenSuccessorElementEqual(predecessorElementPtr));
+		auto it = bss.find(predecessorElementPtr);
+		if (it != bss.end())
+		{
+			bss.erase(it);
+		}
 	}
 
 	/*
@@ -434,6 +446,12 @@ Solution::Solution()
 {
 	__added_entries.reset(new PackageEntryMap);
 	__removed_entries.reset(new PackageEntrySet);
+	__broken_successors = new BrokenSuccessorMap;
+}
+
+Solution::~Solution()
+{
+	delete __broken_successors;
 }
 
 void Solution::prepare()
@@ -502,7 +520,7 @@ void Solution::prepare()
 	}
 
 	insertedElementPtrs = __parent->insertedElementPtrs;
-	__broken_successors = __parent->__broken_successors;
+	__broken_successors = new BrokenSuccessorMap(*__parent->__broken_successors);
 	__parent.reset();
 }
 
@@ -532,9 +550,9 @@ vector< const dg::Element* > Solution::getElements() const
 	return result;
 }
 
-const forward_list< BrokenSuccessor >& Solution::getBrokenSuccessors() const
+const vector< BrokenSuccessor >& Solution::getBrokenSuccessors() const
 {
-	return __broken_successors;
+	return __broken_successors->getContainer();
 }
 
 const PackageEntry* Solution::getPackageEntry(const dg::Element* elementPtr) const
