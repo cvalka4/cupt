@@ -293,6 +293,10 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 				bss.insert(it, BrokenSuccessor(successorPtr, priority));
 			}
 		}
+		else
+		{
+			it->priority = std::max(it->priority, priority);
+		}
 	}
 
 	const auto& predecessorsOfOld = oldElementPtr ? getPredecessorElements(oldElementPtr) : nullList;
