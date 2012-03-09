@@ -856,7 +856,16 @@ BrokenPairType __get_broken_pair(const SolutionStorage& solutionStorage,
 
 		auto leftFailValue = failValue(left.elementPtr);
 		auto rightFailValue = failValue(right.elementPtr);
-		return leftFailValue < rightFailValue;
+		if (leftFailValue < rightFailValue)
+		{
+			return true;
+		}
+		if (leftFailValue > rightFailValue)
+		{
+			return false;
+		}
+
+		return left.elementPtr->id < right.elementPtr->id;
 	};
 
 	const auto& brokenSuccessors = solution.getBrokenSuccessors();
@@ -871,9 +880,7 @@ BrokenPairType __get_broken_pair(const SolutionStorage& solutionStorage,
 	{
 		if (solution.getPackageEntry(reverseDependencyPtr))
 		{
-			if (!result.first ||
-				(static_cast< const dg::VersionVertex* >(result.first)->getPackageName() >
-				static_cast< const dg::VersionVertex* >(reverseDependencyPtr)->getPackageName()))
+			if (!result.first || (result.first->id < reverseDependencyPtr->id))
 			{
 				result.first = reverseDependencyPtr;
 			}
