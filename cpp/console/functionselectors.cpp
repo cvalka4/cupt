@@ -482,6 +482,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_RELEASE_MEMBER_FS("release-origin", baseUri)
 	// binary
 	CONSTRUCT_FS("source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
+	CONSTRUCT_FS("source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
 	CONSTRUCT_FS("essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 	CONSTRUCT_FS("installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
