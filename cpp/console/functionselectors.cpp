@@ -472,6 +472,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
 	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
+	CONSTRUCT_FS("signed", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
 	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
 	CONSTRUCT_RELEASE_MEMBER_FS("archive", archive)
 	CONSTRUCT_RELEASE_MEMBER_FS("codename", codename)
