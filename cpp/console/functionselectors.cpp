@@ -402,6 +402,21 @@ class SourceRegexMatchFS: public PredicateFS
 	}
 };
 
+class BoolMatchFS: public PredicateFS
+{
+	std::function< bool (const SPCV&) > __get_attribute;
+ public:
+	BoolMatchFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
+		: __get_attribute(getAttribute)
+	{
+		__require_n_arguments(arguments, 0);
+	}
+	bool _match(const SPCV& version) const
+	{
+		return __get_attribute(version);
+	}
+};
+
 class OtherFieldRegexMatchFS: public RegexMatchFS
 {
 	string __field_name;
@@ -466,12 +481,17 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_RELEASE_MEMBER_FS("release-origin", baseUri)
 	// binary
 	CONSTRUCT_FS("source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
+	CONSTRUCT_FS("essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
 	__builtin_unreachable();
 }
 
 vector< string > split(const string& input)
 {
+	if (input.empty())
+	{
+		return {};
+	}
 	vector< string > result;
 	size_t argumentStartPosition = 0;
 	size_t position = 0;
