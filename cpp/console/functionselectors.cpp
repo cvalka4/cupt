@@ -249,6 +249,29 @@ class NotFS: public AlgeFS
 	}
 };
 
+class XorFS: public AlgeFS
+{
+	static const Arguments& __check_and_return_arguments(const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 2);
+		return arguments;
+	}
+ public:
+	XorFS(bool binary, const Arguments& arguments)
+		: AlgeFS(binary, __check_and_return_arguments(arguments))
+	{}
+	FSResult select(const Cache& cache, VersionSet&& from) const
+	{
+		auto leftVersions = _leaves.front()->select(cache, VersionSet(from));
+		auto rightVersions = _leaves.back()->select(cache, std::move(from));
+		FSResult result;
+		std::set_symmetric_difference(leftVersions.begin(), leftVersions.end(),
+				rightVersions.begin(), rightVersions.end(),
+				std::back_inserter(result), SpcvLess(cache));
+		return result;
+	}
+};
+
 // for determining, is function selector binary or source
 class BinaryTagDummyFS: public CommonFS
 {
@@ -425,6 +448,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
 	CONSTRUCT_FS("not", NotFS(binary, arguments))
+	CONSTRUCT_FS("xor", XorFS(binary, arguments))
 	// common
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
