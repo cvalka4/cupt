@@ -538,6 +538,8 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 
 unique_ptr< FS > parseFunctionQuery(const string& query, bool binary)
 {
+	Cache::memoize = true;
+	Package::memoize = true;
 	auto result = internalParseFunctionQuery(query, binary);
 	if (binary)
 	{
