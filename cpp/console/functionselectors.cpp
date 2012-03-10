@@ -58,6 +58,17 @@ bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
 	}
 	return left->versionString < right->versionString;
 }
+struct SpcvLess
+{
+ private:
+	const Cache& __cache;
+ public:
+	SpcvLess(const Cache& cache) : __cache(cache) {}
+	bool operator()(const SPCV& left, const SPCV& right)
+	{
+		return __spcv_less(__cache, left, right);
+	}
+};
 
 class VersionSetGetter
 {
@@ -215,6 +226,29 @@ class AndFS: public AlgeFS
 	}
 };
 
+class NotFS: public AlgeFS
+{
+	static const Arguments& __check_and_return_arguments(const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 1);
+		return arguments;
+	}
+ public:
+	NotFS(bool binary, const Arguments& arguments)
+		: AlgeFS(binary, __check_and_return_arguments(arguments))
+	{}
+	FSResult select(const Cache& cache, VersionSet&& from) const
+	{
+		auto fromVersions = ((VersionSet)from).get();
+		auto notVersions = _leaves.front()->select(cache, std::move(from));
+		FSResult result;
+		std::set_difference(fromVersions.begin(), fromVersions.end(),
+				notVersions.begin(), notVersions.end(),
+				std::back_inserter(result), SpcvLess(cache));
+		return result;
+	}
+};
+
 // for determining, is function selector binary or source
 class BinaryTagDummyFS: public CommonFS
 {
@@ -238,13 +272,10 @@ class OrFS: public AlgeFS
 	FSResult select(const Cache& cache, VersionSet&& from) const
 	{
 		auto result = _leaves.front()->select(cache, VersionSet(from));
+		SpcvLess lessPredicate(cache);
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
 			auto part = (*it)->select(cache, VersionSet(from));
-			auto lessPredicate = [&cache](const SPCV& left, const SPCV& right)
-			{
-				return __spcv_less(cache, left, right);
-			};
 			result.merge(part, lessPredicate);
 		}
 		return result;
@@ -393,6 +424,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	// logic
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
+	CONSTRUCT_FS("not", NotFS(binary, arguments))
 	// common
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
