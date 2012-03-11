@@ -171,6 +171,14 @@ class VersionSet
 			return __getter->get(regex);
 		}
 	}
+	VersionSet getUnfiltered() const
+	{
+		return VersionSet(__getter);
+	}
+	bool isFiltered() const
+	{
+		return __filtered;
+	}
 };
 
 class CommonFS: public FS
@@ -447,6 +455,69 @@ class OtherFieldRegexMatchFS: public RegexMatchFS
 	{}
 };
 
+class TransformFS: public CommonFS
+{
+	unique_ptr< CommonFS > __leaf;
+ protected:
+	virtual FSResult _transform(const Cache& cache, const SPCV& version) const = 0;
+ public:
+	TransformFS(bool binary, const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 1);
+		__leaf = internalParseFunctionQuery(arguments[0], binary);
+	}
+	FSResult select(const Cache& cache, VersionSet&& from) const
+	{
+		SpcvLess spcvLess(cache);
+		FSResult allTransformed;
+		for (const auto& version: __leaf->select(cache, from.getUnfiltered()))
+		{
+			auto transformedList = _transform(cache, version);
+			allTransformed.merge(transformedList, spcvLess);
+		}
+		if (from.isFiltered())
+		{
+			FSResult fromVersions = from.get();
+			FSResult result;
+			std::set_intersection(fromVersions.begin(), fromVersions.end(),
+					allTransformed.begin(), allTransformed.end(),
+					std::back_inserter(result), spcvLess);
+			return result;
+		}
+		else
+		{
+			return allTransformed;
+		}
+	}
+};
+
+class DependencyFS: public TransformFS
+{
+	const BinaryVersion::RelationTypes::Type __relation_type;
+ public:
+	DependencyFS(BinaryVersion::RelationTypes::Type relationType, const Arguments& arguments)
+		: TransformFS(true, arguments), __relation_type(relationType)
+	{}
+ protected:
+	FSResult _transform(const Cache& cache, const SPCV& version) const
+	{
+		SpcvLess spcvLess(cache);
+		FSResult result;
+
+		auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
+		for (const auto& relationExpression: binaryVersion->relations[__relation_type])
+		{
+			auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
+			std::sort(satisfyingVersions.begin(), satisfyingVersions.end(), spcvLess);
+			list< SPCV > sortedList;
+			std::move(satisfyingVersions.begin(), satisfyingVersions.end(),
+					std::back_inserter(sortedList));
+			result.merge(sortedList, spcvLess);
+		}
+		return result;
+	}
+};
+
 ///
 
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
@@ -485,6 +556,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
 	CONSTRUCT_FS("essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 	CONSTRUCT_FS("installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
+	CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
 	fatal2(__("unknown selector function '%s'"), functionName);
 	__builtin_unreachable();
 }
