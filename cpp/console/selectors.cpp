@@ -224,8 +224,9 @@ static vector< string > __select_package_names_wildcarded(shared_ptr< const Cach
 	return result;
 }
 
-vector< shared_ptr< const Version > > __select_versions_wildcarded(shared_ptr< const Cache > cache,
-		const string& packageExpression, __version_selector versionSelector,
+template < typename VersionType, typename VersionSelector >
+vector< shared_ptr< const VersionType > > __select_versions_wildcarded(shared_ptr< const Cache > cache,
+		const string& packageExpression, VersionSelector versionSelector,
 		__package_names_fetcher packageNamesFetcher, bool throwOnError)
 {
 	static sregex packageAndRemainderRegex = sregex::compile("([^=/]+)((?:=|/).*)?");
@@ -242,7 +243,7 @@ vector< shared_ptr< const Version > > __select_versions_wildcarded(shared_ptr< c
 		remainder = m[2];
 	}
 
-	vector< shared_ptr< const Version > > result;
+	vector< shared_ptr< const VersionType > > result;
 	if (packageNameExpression.find('?') == string::npos && packageNameExpression.find('*') == string::npos)
 	{
 		// there are no wildcards
@@ -284,30 +285,14 @@ static bool isFunctionExpression(const string& expression)
 	return (expression.find_first_of("()") != string::npos);
 }
 
-vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
-		const string& packageExpression, bool throwOnError)
+template < typename VersionType >
+static vector< shared_ptr< const VersionType > > __convert_version_type(
+		list< shared_ptr< const Version > >&& source)
 {
-	vector< shared_ptr< const Version > > source;
-	if (isFunctionExpression(packageExpression))
+	vector< shared_ptr< const VersionType > > result;
+	for (const auto& oldVersion: source)
 	{
-		// FIXME: use throwOnError
-		source = list2vector(selectBestVersions(*cache, *parseFunctionQuery(packageExpression, true)));
-	}
-	else
-	{
-		auto versionSelector =
-				[](shared_ptr< const Cache > cache, const string& packageName, bool throwOnError) -> shared_ptr< const Version >
-				{
-					return static_pointer_cast< const Version >(selectBinaryVersion(cache, packageName, throwOnError));
-				};
-		source = __select_versions_wildcarded(cache, packageExpression, versionSelector,
-				getBinaryPackageNames, throwOnError);
-	}
-
-	vector< shared_ptr< const BinaryVersion > > result;
-	for (size_t i = 0; i < source.size(); ++i)
-	{
-		auto version = dynamic_pointer_cast< const BinaryVersion >(source[i]);
+		auto version = dynamic_pointer_cast< const VersionType >(oldVersion);
 		if (!version)
 		{
 			fatal2i("version is not binary");
@@ -318,6 +303,22 @@ vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(share
 	return result;
 }
 
+vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
+		const string& packageExpression, bool throwOnError)
+{
+	if (isFunctionExpression(packageExpression))
+	{
+		// FIXME: use throwOnError
+		return __convert_version_type< BinaryVersion >(
+				selectBestVersions(*cache, *parseFunctionQuery(packageExpression, true)));
+	}
+	else
+	{
+		return __select_versions_wildcarded< BinaryVersion >(cache, packageExpression,
+				selectBinaryVersion, getBinaryPackageNames, throwOnError);
+	}
+}
+
 static vector< string > getSourcePackageNames(shared_ptr< const Cache > cache)
 {
 	return cache->getSourcePackageNames();
@@ -326,28 +327,17 @@ static vector< string > getSourcePackageNames(shared_ptr< const Cache > cache)
 vector< shared_ptr< const SourceVersion > > selectSourceVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression, bool throwOnError)
 {
-	// FIXME: use also function selectors
-	auto versionSelector =
-			[](shared_ptr< const Cache > cache, const string& packageName, bool throwOnError) -> shared_ptr< const Version >
-			{
-				return static_pointer_cast< const Version >(selectSourceVersion(cache, packageName, throwOnError));
-			};
-
-	auto source = __select_versions_wildcarded(cache, packageExpression, versionSelector,
-			getSourcePackageNames, throwOnError);
-
-	vector< shared_ptr< const SourceVersion > > result;
-	for (size_t i = 0; i < source.size(); ++i)
+	if (isFunctionExpression(packageExpression))
 	{
-		auto version = dynamic_pointer_cast< const SourceVersion >(source[i]);
-		if (!version)
-		{
-			fatal2i("version is not source");
-		}
-		result.push_back(version);
+		// FIXME: use throwOnError
+		return __convert_version_type< SourceVersion >(
+				selectBestVersions(*cache, *parseFunctionQuery(packageExpression, false)));
 	}
-
-	return result;
+	else
+	{
+		return __select_versions_wildcarded< SourceVersion >(cache, packageExpression,
+				selectSourceVersion, getSourcePackageNames, throwOnError);
+	}
 }
 
 vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
