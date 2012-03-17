@@ -303,14 +303,26 @@ static vector< shared_ptr< const VersionType > > __convert_version_type(
 	return result;
 }
 
+template < typename VersionType, typename QueryProcessor >
+vector< shared_ptr< const VersionType > > __select_using_function(const Cache& cache,
+		const string& expression, QueryProcessor queryProcessor, bool binary, bool throwOnError)
+{
+	auto result = __convert_version_type< VersionType >(
+				queryProcessor(cache, *parseFunctionQuery(expression, binary)));
+	if (throwOnError && result.empty())
+	{
+		fatal2(__("the function expression '%s' selected nothing"), expression);
+	}
+	return std::move(result);
+}
+
 vector< shared_ptr< const BinaryVersion > > selectBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression, bool throwOnError)
 {
 	if (isFunctionExpression(packageExpression))
 	{
-		// FIXME: use throwOnError
-		return __convert_version_type< BinaryVersion >(
-				selectBestVersions(*cache, *parseFunctionQuery(packageExpression, true)));
+		return __select_using_function< BinaryVersion >(*cache, packageExpression,
+				selectBestVersions, true, throwOnError);
 	}
 	else
 	{
@@ -329,9 +341,8 @@ vector< shared_ptr< const SourceVersion > > selectSourceVersionsWildcarded(share
 {
 	if (isFunctionExpression(packageExpression))
 	{
-		// FIXME: use throwOnError
-		return __convert_version_type< SourceVersion >(
-				selectBestVersions(*cache, *parseFunctionQuery(packageExpression, false)));
+		return __select_using_function< SourceVersion >(*cache, packageExpression,
+				selectBestVersions, false, throwOnError);
 	}
 	else
 	{
