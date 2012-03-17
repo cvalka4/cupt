@@ -557,7 +557,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 	CONSTRUCT_FS("installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
 	CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
-	fatal2(__("unknown selector function '%s'"), functionName);
+	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
 }
 
