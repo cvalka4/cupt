@@ -228,7 +228,7 @@ bpo::variables_map parseOptions(const Context& context, bpo::options_description
 	}
 	catch (const bpo::error& e)
 	{
-		fatal2(__("failed to parse options: %s"), e.what());
+		fatal2(__("failed to parse command-line options: %s"), e.what());
 	}
 	bpo::notify(variablesMap);
 
@@ -315,7 +315,7 @@ shared_ptr< Config > Context::getConfig()
 		}
 		catch (Exception&)
 		{
-			fatal2(__("error while loading config"));
+			fatal2(__("error while loading the configuration"));
 		}
 	}
 	return __config;
@@ -343,7 +343,7 @@ shared_ptr< const Cache > Context::getCache(
 		}
 		catch (Exception&)
 		{
-			fatal2(__("error while creating package cache"));
+			fatal2(__("error while creating the package cache"));
 		}
 	}
 

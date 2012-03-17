@@ -1327,14 +1327,16 @@ map< string, pair< download::Manager::DownloadEntity, string > > PackagesWorker:
 
 		if (!_config->getBool("cupt::worker::simulate"))
 		{
-			string partialDirectory = archivesDirectory + partialDirectorySuffix;
-			if (! fs::dirExists(partialDirectory))
+			try
 			{
-				if (mkdir(partialDirectory.c_str(), 0755) == -1)
-				{
-					_logger->loggedFatal2(Logger::Subsystem::Packages, 3,
-							format2e, "unable to create partial directory '%s'", partialDirectory);
-				}
+				fs::mkpath(archivesDirectory);
+				string partialDirectory = archivesDirectory + partialDirectorySuffix;
+				fs::mkpath(partialDirectory);
+			}
+			catch (...)
+			{
+				_logger->loggedFatal2(Logger::Subsystem::Packages, 3,
+						format2, "unable to create the archive downloads directory");
 			}
 		}
 
@@ -1412,8 +1414,11 @@ map< string, pair< download::Manager::DownloadEntity, string > > PackagesWorker:
 						unlink(downloadPath.c_str()); // intentionally ignore errors if any
 						return __("hash sums mismatch");
 					}
-
-					return fs::move(downloadPath, targetPath);
+					if (!fs::move(downloadPath, targetPath))
+					{
+						return format2e(__("unable to rename '%s' to '%s'"), downloadPath, targetPath);
+					}
+					return string();
 				};
 
 				auto downloadValue = std::make_pair(std::move(downloadEntity), targetPath);
@@ -1931,6 +1936,7 @@ void PackagesWorker::markAsAutomaticallyInstalled(const string& packageName, boo
 				__auto_installed_package_names.erase(packageName);
 			}
 			auto extendedInfoPath = _cache->getPathOfExtendedStates();
+			fs::mkpath(fs::dirname(extendedInfoPath));
 			auto tempPath = extendedInfoPath + ".cupt.tmp";
 
 			{
@@ -1949,11 +1955,11 @@ void PackagesWorker::markAsAutomaticallyInstalled(const string& packageName, boo
 				}
 			}
 
-			auto moveResult = fs::move(tempPath, extendedInfoPath);
-			if (!moveResult.empty())
+			if (!fs::move(tempPath, extendedInfoPath))
 			{
 				_logger->loggedFatal2(Logger::Subsystem::Packages, 3,
-						format2, "unable to renew extended states file: %s", moveResult);
+						format2e, "unable to renew extended states file: unable to rename '%s' to '%s'",
+						tempPath, extendedInfoPath);
 			}
 		}
 		catch (...)

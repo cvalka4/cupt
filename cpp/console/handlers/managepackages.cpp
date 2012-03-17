@@ -551,7 +551,7 @@ void checkForRemovalOfEssentialPackages(const shared_ptr< const Cache >& cache,
 	if (!essentialPackageNames.empty())
 	{
 		isDangerous = true;
-		cout << __("WARNING! The following essential packages will be REMOVED:") << endl;
+		cout << __("WARNING! The following essential packages will be removed:") << endl;
 		printPackageNamesByLine(essentialPackageNames);
 	}
 }
@@ -584,7 +584,7 @@ void checkForIgnoredHolds(const shared_ptr< const Cache >& cache,
 	if (!ignoredHoldsPackageNames.empty())
 	{
 		isDangerous = true;
-		cout << __("WARNING! The following packages ON HOLD will change their state:") << endl;
+		cout << __("WARNING! The following packages on hold will change their state:") << endl;
 		printPackageNamesByLine(ignoredHoldsPackageNames);
 	}
 }
@@ -1165,7 +1165,7 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 	{
 		if (!config->getString("cupt::resolver::external-command").empty())
 		{
-			fatal2(__("using external resolver is not supported now"));
+			fatal2(__("using an external resolver is not supported now"));
 		}
 		else
 		{
@@ -1195,6 +1195,8 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 			purgedPackageNames, addArgumentsFlag, thereIsNothingToDo);
 
 	resolve:
+	addArgumentsFlag = false;
+	thereIsNothingToDo = false;
 	bool resolved = resolver->resolve(callback);
 	if (addArgumentsFlag && std::cin)
 	{

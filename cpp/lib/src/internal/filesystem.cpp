@@ -52,13 +52,9 @@ string dirname(const string& path)
 	return result;
 }
 
-string move(const string& oldPath, const string& newPath)
+bool move(const string& oldPath, const string& newPath)
 {
-	if (rename(oldPath.c_str(), newPath.c_str()) == -1)
-	{
-		return format2e(__("unable to rename '%s' to '%s'"), oldPath, newPath);
-	}
-	return "";
+	return (rename(oldPath.c_str(), newPath.c_str()) != -1);
 }
 
 vector< string > glob(const string& param)
@@ -172,6 +168,27 @@ size_t fileSize(const string& path)
 		fatal2(__("the file '%s' is not a regular file"), path);
 	}
 	return s.st_size;
+}
+
+void mkpath(const string& path)
+{
+	auto ensureDirectoryExist = [](const string& pathPart)
+	{
+		if (mkdir(pathPart.c_str(), 0755) == -1)
+		{
+			if (errno != EEXIST)
+			{
+				fatal2e(__("unable to create the directory '%s'"), pathPart);
+			}
+		}
+	};
+
+	size_t position = 0;
+	while (position = path.find('/', ++position), position != string::npos)
+	{
+		ensureDirectoryExist(path.substr(0, position));
+	}
+	ensureDirectoryExist(path);
 }
 
 }

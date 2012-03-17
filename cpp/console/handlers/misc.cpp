@@ -593,7 +593,7 @@ int policy(Context& context, bool source)
 			auto policyVersion = cache->getPolicyVersion(package);
 			if (!policyVersion)
 			{
-				fatal2(__("no versions available for package '%s'"), packageName);
+				fatal2(__("no versions available for the package '%s'"), packageName);
 			}
 
 			cout << packageName << ':' << endl;
@@ -763,7 +763,7 @@ int findDependencyChain(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal2(__("no binary packages specified"));
+		fatal2(__("no binary package expressions specified"));
 	}
 
 	bool installedOnly = variables.count("installed-only") || (arguments.size() == 1);
