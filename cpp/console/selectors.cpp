@@ -295,7 +295,7 @@ static vector< shared_ptr< const VersionType > > __convert_version_type(
 		auto version = dynamic_pointer_cast< const VersionType >(oldVersion);
 		if (!version)
 		{
-			fatal2i("version is not binary");
+			fatal2i("version has a wrong type");
 		}
 		result.push_back(version);
 	}
