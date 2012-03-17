@@ -689,9 +689,3 @@ list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector)
 	return result;
 }
 
-vector< SPCV > list2vector(list< SPCV >&& source)
-{
-	vector< SPCV > result;
-	std::move(source.begin(), source.end(), std::back_inserter(result));
-	return result;
-}

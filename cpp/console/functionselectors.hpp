@@ -41,7 +41,5 @@ list< shared_ptr< const Version > > selectAllVersions(
 list< shared_ptr< const Version > > selectBestVersions(
 		const Cache&, const FunctionSelector&);
 
-vector< shared_ptr< const Version > > list2vector(list< shared_ptr< const Version > >&&);
-
 #endif
 
