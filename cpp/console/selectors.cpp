@@ -351,20 +351,21 @@ vector< shared_ptr< const SourceVersion > > selectSourceVersionsWildcarded(share
 	}
 }
 
-vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
-		const string& packageExpression)
+template < typename VersionType, typename PackageSelector >
+static vector< shared_ptr< const VersionType > > __select_all_versions_wildcarded(
+		shared_ptr< const Cache > cache, const string& packageExpression,
+		__package_names_fetcher packageNamesFetcher, PackageSelector packageSelector)
 {
-	// FIXME: use also function selectors
-	vector< shared_ptr< const BinaryVersion > > result;
+	vector< shared_ptr< const VersionType > > result;
 
-	auto packageNames = __select_package_names_wildcarded(cache, packageExpression, getBinaryPackageNames);
+	auto packageNames = __select_package_names_wildcarded(cache, packageExpression, packageNamesFetcher);
 	if (packageNames.empty())
 	{
-		fatal2(__("no binary packages available for the wildcarded expression '%s'"), packageExpression);
+		fatal2(__("no packages available for the wildcarded expression '%s'"), packageExpression);
 	}
 	FORIT(packageNameIt, packageNames)
 	{
-		auto package = getBinaryPackage(cache, *packageNameIt);
+		auto package = packageSelector(cache, *packageNameIt, false);
 		auto versions = package->getVersions();
 		std::move(versions.begin(), versions.end(), std::back_inserter(result));
 	}
@@ -372,24 +373,33 @@ vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(sh
 	return result;
 }
 
+vector< shared_ptr< const BinaryVersion > > selectAllBinaryVersionsWildcarded(shared_ptr< const Cache > cache,
+		const string& packageExpression)
+{
+	if (isFunctionExpression(packageExpression))
+	{
+		return __select_using_function< BinaryVersion >(*cache, packageExpression,
+				selectAllVersions, true, false);
+	}
+	else
+	{
+		return __select_all_versions_wildcarded< BinaryVersion >(cache, packageExpression,
+				getBinaryPackageNames, getBinaryPackage);
+	}
+}
+
 vector< shared_ptr< const SourceVersion > > selectAllSourceVersionsWildcarded(shared_ptr< const Cache > cache,
 		const string& packageExpression)
 {
-	// FIXME: use also function selectors
-	vector< shared_ptr< const SourceVersion > > result;
-
-	auto packageNames = __select_package_names_wildcarded(cache, packageExpression, getSourcePackageNames);
-	if (packageNames.empty())
+	if (isFunctionExpression(packageExpression))
 	{
-		fatal2(__("no source packages available for the wildcarded expression '%s'"), packageExpression);
+		return __select_using_function< SourceVersion >(*cache, packageExpression,
+				selectAllVersions, false, false);
 	}
-	FORIT(packageNameIt, packageNames)
+	else
 	{
-		auto package = getSourcePackage(cache, *packageNameIt);
-		auto versions = package->getVersions();
-		std::move(versions.begin(), versions.end(), std::back_inserter(result));
+		return __select_all_versions_wildcarded< SourceVersion >(cache, packageExpression,
+				getSourcePackageNames, getSourcePackage);
 	}
-
-	return result;
 }
 
