@@ -144,27 +144,28 @@ class VersionSet
 	VersionSet(FSResult&& versions)
 		: __filtered(true), __versions(std::move(versions))
 	{}
-	FSResult get()
+	const FSResult& get() const
 	{
 		if (__filtered)
 		{
-			return std::move(__versions);
+			return __versions;
 		}
 		else
 		{
 			return __getter->getAll();
 		}
 	}
-	FSResult get(const sregex& regex)
+	FSResult get(const sregex& regex) const
 	{
 		if (__filtered)
 		{
 			smatch m;
-			__versions.remove_if([&regex, &m](const SPCV& version)
+			FSResult result(__versions);
+			result.remove_if([&regex, &m](const SPCV& version)
 			{
 				return !regex_match(version->packageName, m, regex);
 			});
-			return std::move(__versions);
+			return result;
 		}
 		else
 		{
@@ -185,7 +186,7 @@ class CommonFS: public FS
 {
  public:
 	typedef vector< string > Arguments;
-	virtual FSResult select(const Cache&, VersionSet&& from) const = 0;
+	virtual FSResult select(const Cache&, const VersionSet& from) const = 0;
 };
 
 unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary);
@@ -223,9 +224,9 @@ class AndFS: public AlgeFS
 	AndFS(bool binary, const Arguments& arguments)
 		: AlgeFS(binary, arguments)
 	{}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		auto result = _leaves.front()->select(cache, std::move(from));
+		auto result = _leaves.front()->select(cache, from);
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
 			result = (*it)->select(cache, std::move(result));
@@ -245,10 +246,10 @@ class NotFS: public AlgeFS
 	NotFS(bool binary, const Arguments& arguments)
 		: AlgeFS(binary, __check_and_return_arguments(arguments))
 	{}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		auto fromVersions = ((VersionSet)from).get();
-		auto notVersions = _leaves.front()->select(cache, std::move(from));
+		const auto& fromVersions = from.get();
+		auto notVersions = _leaves.front()->select(cache, from);
 		FSResult result;
 		std::set_difference(fromVersions.begin(), fromVersions.end(),
 				notVersions.begin(), notVersions.end(),
@@ -268,10 +269,10 @@ class XorFS: public AlgeFS
 	XorFS(bool binary, const Arguments& arguments)
 		: AlgeFS(binary, __check_and_return_arguments(arguments))
 	{}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		auto leftVersions = _leaves.front()->select(cache, VersionSet(from));
-		auto rightVersions = _leaves.back()->select(cache, std::move(from));
+		auto leftVersions = _leaves.front()->select(cache, from);
+		auto rightVersions = _leaves.back()->select(cache, from);
 		FSResult result;
 		std::set_symmetric_difference(leftVersions.begin(), leftVersions.end(),
 				rightVersions.begin(), rightVersions.end(),
@@ -288,9 +289,9 @@ class BinaryTagDummyFS: public CommonFS
 	BinaryTagDummyFS(unique_ptr< CommonFS >&& realFS)
 		: __real_fs(std::move(realFS))
 	{}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		return __real_fs->select(cache, std::move(from));
+		return __real_fs->select(cache, from);
 	}
 };
 
@@ -300,13 +301,13 @@ class OrFS: public AlgeFS
 	OrFS(bool binary, const Arguments& arguments)
 		: AlgeFS(binary, arguments)
 	{}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		auto result = _leaves.front()->select(cache, VersionSet(from));
+		auto result = _leaves.front()->select(cache, from);
 		SpcvLess lessPredicate(cache);
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
-			auto part = (*it)->select(cache, VersionSet(from));
+			auto part = (*it)->select(cache, from);
 			result.merge(part, lessPredicate);
 		}
 		return result;
@@ -318,7 +319,7 @@ class PredicateFS: public CommonFS
  protected:
 	virtual bool _match(const SPCV& version) const = 0;
  public:
-	FSResult select(const Cache&, VersionSet&& from) const
+	FSResult select(const Cache&, const VersionSet& from) const
 	{
 		FSResult result = from.get();
 		result.remove_if([this](const SPCV& version) { return !this->_match(version); });
@@ -367,7 +368,7 @@ class PackageNameFS: public CommonFS
 	PackageNameFS(const Arguments& arguments)
 		: __regex(__get_regex_from_arguments(arguments))
 	{}
-	FSResult select(const Cache&, VersionSet&& from) const
+	FSResult select(const Cache&, const VersionSet& from) const
 	{
 		return from.get(__regex);
 	}
@@ -466,7 +467,7 @@ class TransformFS: public CommonFS
 		__require_n_arguments(arguments, 1);
 		__leaf = internalParseFunctionQuery(arguments[0], binary);
 	}
-	FSResult select(const Cache& cache, VersionSet&& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
 		SpcvLess spcvLess(cache);
 		FSResult allTransformed;
@@ -477,7 +478,7 @@ class TransformFS: public CommonFS
 		}
 		if (from.isFiltered())
 		{
-			FSResult fromVersions = from.get();
+			const auto& fromVersions = from.get();
 			FSResult result;
 			std::set_intersection(fromVersions.begin(), fromVersions.end(),
 					allTransformed.begin(), allTransformed.end(),
