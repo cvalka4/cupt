@@ -136,9 +136,10 @@ class VersionSet
 	const VersionSetGetter* __getter;
 	bool __filtered;
 	FSResult __versions;
+	std::map< string, FSResult > __variables;
 
-	VersionSet(const VersionSet& /* from */, FSResult&& versions)
-		: __filtered(true), __versions(std::move(versions))
+	VersionSet(const VersionSet& from, FSResult&& versions)
+		: __filtered(true), __versions(std::move(versions)), __variables(from.__variables)
 	{}
  public:
 	explicit VersionSet(const VersionSetGetter* getter)
@@ -176,9 +177,24 @@ class VersionSet
 			return __getter->get(regex);
 		}
 	}
+	void setVariable(const string& name, FSResult&& versions)
+	{
+		__variables[name] = std::move(versions);
+	}
+	const FSResult& getFromVariable(const string& name) const
+	{
+		auto it = __variables.find(name);
+		if (it == __variables.end())
+		{
+			fatal2("the variable '%s' is not defined", name);
+		}
+		return it->second;
+	}
 	VersionSet getUnfiltered() const
 	{
-		return VersionSet(__getter);
+		VersionSet result(__getter);
+		result.__variables = this->__variables;
+		return result;
 	}
 	bool isFiltered() const
 	{
@@ -202,6 +218,60 @@ void __require_n_arguments(const CommonFS::Arguments& arguments, size_t n)
 		fatal2(__("the function requires exactly %zu arguments"), n);
 	}
 }
+
+FSResult __filter_through(const Cache& cache, const FSResult& versions, const VersionSet& allowedSet)
+{
+	if (allowedSet.isFiltered())
+	{
+		const auto& allowedVersions = allowedSet.get();
+		FSResult result;
+		std::set_intersection(allowedVersions.begin(), allowedVersions.end(),
+				versions.begin(), versions.end(),
+				std::back_inserter(result), SpcvLess(cache));
+		return result;
+	}
+	else
+	{
+		return versions;
+	}
+}
+
+class DefineVariableFS: public CommonFS
+{
+	string __name;
+	unique_ptr< CommonFS > __value_fs;
+	unique_ptr< CommonFS > __leaf_fs;
+ public:
+	DefineVariableFS(bool binary, const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 3);
+		__name = arguments[0];
+		__value_fs = internalParseFunctionQuery(arguments[1], binary);
+		__leaf_fs = internalParseFunctionQuery(arguments[2], binary);
+	}
+	FSResult select(const Cache& cache, const VersionSet& from) const
+	{
+		VersionSet modifiedFrom(from);
+		modifiedFrom.setVariable(__name,
+				__value_fs->select(cache, from.getUnfiltered()));
+		return __leaf_fs->select(cache, modifiedFrom);
+	}
+};
+
+class ExtractVariableFS: public CommonFS
+{
+	const string __name;
+ public:
+	ExtractVariableFS(const string& name, const Arguments& arguments)
+		: __name(name)
+	{
+		__require_n_arguments(arguments, 0);
+	}
+	FSResult select(const Cache& cache, const VersionSet& from) const
+	{
+		return __filter_through(cache, from.getFromVariable(__name), from);
+	}
+};
 
 class AlgeFS: public CommonFS
 {
@@ -480,19 +550,7 @@ class TransformFS: public CommonFS
 			auto transformedList = _transform(cache, version);
 			allTransformed.merge(transformedList, spcvLess);
 		}
-		if (from.isFiltered())
-		{
-			const auto& fromVersions = from.get();
-			FSResult result;
-			std::set_intersection(fromVersions.begin(), fromVersions.end(),
-					allTransformed.begin(), allTransformed.end(),
-					std::back_inserter(result), spcvLess);
-			return result;
-		}
-		else
-		{
-			return allTransformed;
-		}
+		return __filter_through(cache, allTransformed, from);
 	}
 };
 
@@ -535,6 +593,12 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	#define CONSTRUCT_RELEASE_MEMBER_FS(name, member) \
 			CONSTRUCT_FS(name, SourceRegexMatchFS(VERSION_RELEASE_MEMBER(member), arguments))
 
+	// variables
+	if (functionName.front() == '_')
+	{
+		return new ExtractVariableFS(functionName, arguments);
+	}
+	CONSTRUCT_FS("with", DefineVariableFS(binary, arguments))
 	// logic
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
