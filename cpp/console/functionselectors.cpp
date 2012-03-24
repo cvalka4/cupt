@@ -236,6 +236,13 @@ FSResult __filter_through(const Cache& cache, const FSResult& versions, const Ve
 	}
 }
 
+void __merge_fsresults(const Cache& cache, FSResult& main, FSResult&& other)
+{
+	SpcvLess spcvLess(cache);
+	main.merge(std::move(other), spcvLess);
+	main.unique(PointerEqual< const Version >());
+}
+
 class DefineVariableFS: public CommonFS
 {
 	string __name;
@@ -378,11 +385,10 @@ class OrFS: public AlgeFS
 	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
 		auto result = _leaves.front()->select(cache, from);
-		SpcvLess lessPredicate(cache);
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
 			auto part = (*it)->select(cache, from);
-			result.merge(part, lessPredicate);
+			__merge_fsresults(cache, result, std::move(part));
 		}
 		return result;
 	}
@@ -543,14 +549,51 @@ class TransformFS: public CommonFS
 	}
 	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		SpcvLess spcvLess(cache);
 		FSResult allTransformed;
 		for (const auto& version: __leaf->select(cache, from.getUnfiltered()))
 		{
 			auto transformedList = _transform(cache, version);
-			allTransformed.merge(transformedList, spcvLess);
+			__merge_fsresults(cache, allTransformed, std::move(transformedList));
 		}
 		return __filter_through(cache, allTransformed, from);
+	}
+};
+
+class RecursiveFS: public CommonFS
+{
+	string __variable_name;
+	unique_ptr< CommonFS > __initial_variable_value_fs;
+	unique_ptr< CommonFS > __iterating_fs;
+
+ public:
+	RecursiveFS(bool binary, const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 3);
+		__variable_name = arguments[0];
+		__initial_variable_value_fs = internalParseFunctionQuery(arguments[1], binary);
+		__iterating_fs = internalParseFunctionQuery(arguments[2], binary);
+	}
+	FSResult select(const Cache& cache, const VersionSet& from) const
+	{
+		SpcvLess spcvLess(cache);
+		FSResult result;
+
+		FSResult variableValue = __initial_variable_value_fs->select(cache, from.getUnfiltered());
+		size_t previousResultSize;
+		do
+		{
+			previousResultSize = result.size();
+			debug2("s: %zu", previousResultSize);
+
+			VersionSet iterationSet = from.getUnfiltered();
+			iterationSet.setVariable(__variable_name, std::move(variableValue));
+			__merge_fsresults(cache, result, __iterating_fs->select(cache, iterationSet));
+
+			variableValue = result;
+		}
+		while (result.size() != previousResultSize);
+
+		return __filter_through(cache, result, from);
 	}
 };
 
@@ -575,7 +618,7 @@ class DependencyFS: public TransformFS
 			list< SPCV > sortedList;
 			std::move(satisfyingVersions.begin(), satisfyingVersions.end(),
 					std::back_inserter(sortedList));
-			result.merge(sortedList, spcvLess);
+			__merge_fsresults(cache, result, std::move(sortedList));
 		}
 		return result;
 	}
@@ -599,6 +642,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		return new ExtractVariableFS(functionName, arguments);
 	}
 	CONSTRUCT_FS("with", DefineVariableFS(binary, arguments))
+	CONSTRUCT_FS("recursive", RecursiveFS(binary, arguments))
 	// logic
 	CONSTRUCT_FS("and", AndFS(binary, arguments))
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
