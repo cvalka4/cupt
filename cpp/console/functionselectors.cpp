@@ -137,13 +137,17 @@ class VersionSet
 	bool __filtered;
 	FSResult __versions;
 
+	VersionSet(const VersionSet& /* from */, FSResult&& versions)
+		: __filtered(true), __versions(std::move(versions))
+	{}
  public:
 	explicit VersionSet(const VersionSetGetter* getter)
 		: __getter(getter), __filtered(false)
 	{}
-	VersionSet(FSResult&& versions)
-		: __filtered(true), __versions(std::move(versions))
-	{}
+	VersionSet generate(FSResult&& versions) const
+	{
+		return VersionSet(*this, std::move(versions));
+	}
 	const FSResult& get() const
 	{
 		if (__filtered)
@@ -229,7 +233,7 @@ class AndFS: public AlgeFS
 		auto result = _leaves.front()->select(cache, from);
 		for (auto it = ++_leaves.begin(); it != _leaves.end(); ++it)
 		{
-			result = (*it)->select(cache, std::move(result));
+			result = (*it)->select(cache, from.generate(std::move(result)));
 		}
 		return result;
 	}
