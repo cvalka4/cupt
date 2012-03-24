@@ -39,7 +39,7 @@ static bool __get_file_size(const string& path, ssize_t* result)
 	{
 		if (errno != ENOENT)
 		{
-			fatal2e(__("lstat() failed: '%s'"), path);
+			fatal2e(__("%s() failed: '%s'"), "lstat", path);
 		}
 		return false;
 	}
@@ -100,6 +100,7 @@ class WgetMethod: public cupt::download::Method
 				}
 				p.push_back(string(uri));
 				p.push_back(string("--output-document=") + targetPath);
+				p.push_back(format2("--user-agent=\"Wget (libcupt/%s)\"", cupt::libraryVersion));
 				p.push_back("2>&1");
 			}
 

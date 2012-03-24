@@ -33,7 +33,7 @@ static int __guarded_fileno(FILE* handle, const string& path)
 	int fd = fileno(handle);
 	if (fd == -1)
 	{
-		fatal2e(__("fileno failed: '%s'"), path);
+		fatal2e(__("%s() failed: '%s'"), "fileno", path);
 	}
 	return fd;
 }
@@ -284,7 +284,7 @@ void File::lock(int flags)
 	if (flock(fd, flags) == -1)
 	{
 		auto actionName = (flags & LOCK_UN) ? __("release") : __("obtain");
-		fatal2e(__("unable to %s lock on the file '%s'"), actionName, __impl->path);
+		fatal2e(__("unable to %s a lock on the file '%s'"), actionName, __impl->path);
 	}
 }
 

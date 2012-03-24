@@ -125,15 +125,19 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 		const Config& config, const IndexEntry& indexEntry, const string& suffix)
 {
 	auto baseUri = getUriOfIndexEntry(indexEntry);
+	// TODO: make cachefiles::getAlias* functions
+	auto alias = indexEntry.uri + ' ' + indexEntry.distribution;
 
 	vector< Cache::IndexDownloadRecord > result;
-	{ // reading
+
+	try
+	{
 		string openError;
 		auto releaseFilePath = getPathOfReleaseList(config, indexEntry);
 		File releaseFile(releaseFilePath, "r", openError);
 		if (!openError.empty())
 		{
-			fatal2(__("unable to open release file '%s': %s"), releaseFilePath, openError);
+			fatal2(__("unable to open the file '%s': %s"), releaseFilePath, openError);
 		}
 
 		HashSums::Type currentHashSumType = HashSums::Count;
@@ -158,13 +162,12 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 			{
 				if (currentHashSumType == HashSums::Count)
 				{
-					fatal2(__("release line '%s' without previous hash sum declaration at release file '%s'"),
-								line, releaseFilePath);
+					fatal2(__("no hash sum declarations before the line '%s'"), line);
 				}
 				static sregex hashSumsLineRegex = sregex::compile("\\s([[:xdigit:]]+)\\s+(\\d+)\\s+(.*)");
 				if (!regex_match(line, m, hashSumsLineRegex))
 				{
-					fatal2(__("malformed release line '%s' at file '%s'"), line, releaseFilePath);
+					fatal2(__("malformed line '%s'"), line);
 				}
 
 				string name = m[3];
@@ -195,15 +198,18 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 				}
 			}
 		}
-	}
-
-	// checks
-	FORIT(recordIt, result)
-	{
-		if (recordIt->hashSums.empty())
+		// checks
+		FORIT(recordIt, result)
 		{
-			fatal2(__("no hash sums defined for index list URI '%s'"), recordIt->uri);
+			if (recordIt->hashSums.empty())
+			{
+				fatal2(__("no hash sums defined for the index uri '%s'"), recordIt->uri);
+			}
 		}
+	}
+	catch (Exception&)
+	{
+		fatal2("unable to parse the release '%s'", alias);
 	}
 
 	return result;
@@ -436,7 +442,7 @@ bool verifySignature(const Config& config, const string& path)
 		File gpgPipe(gpgCommand, "pr", openError);
 		if (!openError.empty())
 		{
-			fatal2(__("unable to open gpg pipe: %s"), openError);
+			fatal2(__("unable to open the pipe '%s': %s"), gpgCommand, openError);
 		}
 
 		smatch m;
@@ -471,7 +477,7 @@ bool verifySignature(const Config& config, const string& path)
 		if (status.empty())
 		{
 			// no info from gpg at all
-			fatal2(__("gpg: '%s': no info received"), path);
+			fatal2(__("gpg: '%s': no information"), path);
 		}
 
 		// first line ought to be validness indicator
@@ -487,14 +493,9 @@ bool verifySignature(const Config& config, const string& path)
 		if (messageType == "GOODSIG")
 		{
 			string furtherInfo = gpgGetLine();
-			if (furtherInfo.empty())
-			{
-				fatal2(__("gpg: '%s': error: unfinished status"), path);
-			}
-
 			if (!regex_match(furtherInfo, m, messageRegex))
 			{
-				fatal2(__("gpg: '%s': invalid further info string '%s'"), path, furtherInfo);
+				fatal2(__("gpg: '%s': invalid detailed information string '%s'"), path, furtherInfo);
 			}
 
 			string furtherInfoType = m[1];
@@ -536,7 +537,7 @@ bool verifySignature(const Config& config, const string& path)
 			{
 				if (!regex_match(detail, m, messageRegex))
 				{
-					fatal2(__("gpg: '%s': invalid detailed info string '%s'"), path, detail);
+					fatal2(__("gpg: '%s': invalid detailed information string '%s'"), path, detail);
 				}
 				string detailType = m[1];
 				string detailMessage = m[2];
@@ -548,13 +549,13 @@ bool verifySignature(const Config& config, const string& path)
 					//
 					// NO_PUBKEY D4F5CE00FA0E9B9D
 					//
-					warn2(__("gpg: '%s': public key '%s' not found"), path, detailMessage);
+					warn2(__("gpg: '%s': public key '%s' is not found"), path, detailMessage);
 				}
 			}
 
 			if (!publicKeyWasNotFound)
 			{
-				warn2(__("gpg: '%s': could not verify signature: %s"), path, message);
+				warn2(__("gpg: '%s': could not verify a signature: %s"), path, message);
 			}
 		}
 		else if (messageType == "NODATA")
@@ -568,12 +569,12 @@ bool verifySignature(const Config& config, const string& path)
 		}
 		else
 		{
-			warn2(__("gpg: '%s': unknown message received: %s %s"), path, messageType, message);
+			warn2(__("gpg: '%s': unknown message: %s %s"), path, messageType, message);
 		}
 	}
 	catch (Exception&)
 	{
-		warn2(__("error while verifying signature for file '%s'"), path);
+		warn2(__("unable to verify a signature for the file '%s'"), path);
 	}
 
 	if (debugging)

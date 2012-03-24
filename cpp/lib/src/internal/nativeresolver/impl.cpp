@@ -76,8 +76,14 @@ void NativeResolverImpl::__import_packages_to_reinstall()
 template < typename... Args >
 void __mydebug_wrapper(const Solution& solution, const Args&... args)
 {
+	__mydebug_wrapper(solution, solution.id, args...);
+}
+
+template < typename... Args >
+void __mydebug_wrapper(const Solution& solution, size_t id, const Args&... args)
+{
 	string levelString(solution.level, ' ');
-	debug2("%s(%u:%zd) %s", levelString, solution.id, solution.score, format2(args...));
+	debug2("%s(%u:%zd) %s", levelString, id, solution.score, format2(args...));
 }
 
 // installs new version, but does not sticks it
@@ -114,7 +120,7 @@ void NativeResolverImpl::installVersion(const shared_ptr< const BinaryVersion >&
 	dg::InitialPackageEntry& initialPackageEntry = __initial_packages[packageName];
 	if (!__prepare_version_no_stick(version, initialPackageEntry))
 	{
-		fatal2(__("unable to re-schedule package '%s'"), packageName);
+		fatal2(__("unable to re-schedule the package '%s'"), packageName);
 	}
 
 	initialPackageEntry.sticked = true;
@@ -144,7 +150,7 @@ void NativeResolverImpl::removePackage(const string& packageName)
 	dg::InitialPackageEntry& initialPackageEntry = __initial_packages[packageName];
 	if (initialPackageEntry.version && initialPackageEntry.sticked)
 	{
-		fatal2(__("unable to re-schedule package '%s'"), packageName);
+		fatal2(__("unable to re-schedule the package '%s'"), packageName);
 	}
 	initialPackageEntry.sticked = true;
 	initialPackageEntry.modified = true;
@@ -345,15 +351,6 @@ bool NativeResolverImpl::__clean_automatically_installed(Solution& solution)
 			if (!reachableElementPtrPtrs.count(&*elementPtrIt))
 			{
 				auto emptyElementPtr = __solution_storage->getCorrespondingEmptyElement(*elementPtrIt);
-				auto currentPackageEntryPtr = solution.getPackageEntry(*elementPtrIt);
-				if (!currentPackageEntryPtr->isModificationAllowed(emptyElementPtr))
-				{
-					if (debugging)
-					{
-						__mydebug_wrapper(solution, "no autoremoval allowed for '%s'", (*elementPtrIt)->toString());
-					}
-					return false;
-				}
 
 				PackageEntry packageEntry;
 				packageEntry.autoremoved = true;
@@ -414,7 +411,7 @@ void NativeResolverImpl::__require_strict_relation_expressions()
    by resolver */
 
 void NativeResolverImpl::__pre_apply_action(const Solution& originalSolution,
-		Solution& solution, unique_ptr< Action >&& actionToApply)
+		Solution& solution, unique_ptr< Action >&& actionToApply, size_t oldSolutionId)
 {
 	if (originalSolution.finished)
 	{
@@ -427,7 +424,7 @@ void NativeResolverImpl::__pre_apply_action(const Solution& originalSolution,
 
 	if (__config->getBool("debug::resolver"))
 	{
-		__mydebug_wrapper(originalSolution, "-> (%u,Δ:[%s]) trying: '%s' -> '%s'",
+		__mydebug_wrapper(originalSolution, oldSolutionId, "-> (%u,Δ:[%s]) trying: '%s' -> '%s'",
 				solution.id, __score_manager.getScoreChangeString(profit),
 				oldElementPtr ? oldElementPtr->toString() : "", newElementPtr->toString());
 	}
@@ -495,11 +492,13 @@ void NativeResolverImpl::__pre_apply_actions_to_solution_tree(
 
 	// apply all the solutions by one
 	bool onlyOneAction = (actions.size() == 1);
+	auto oldSolutionId = currentSolution->id;
 	FORIT(actionIt, actions)
 	{
-		auto newSolution = onlyOneAction ? currentSolution
-				: __solution_storage->cloneSolution(currentSolution);
-		__pre_apply_action(*currentSolution, *newSolution, std::move(*actionIt));
+		auto newSolution = onlyOneAction ?
+				__solution_storage->fakeCloneSolution(currentSolution) :
+				__solution_storage->cloneSolution(currentSolution);
+		__pre_apply_action(*currentSolution, *newSolution, std::move(*actionIt), oldSolutionId);
 		callback(newSolution);
 	}
 }
@@ -537,7 +536,7 @@ void NativeResolverImpl::__post_apply_action(Solution& solution)
 	{ // process elements to reject
 		FORIT(elementPtrIt, action.elementsToReject)
 		{
-			__solution_storage->setRejection(solution, *elementPtrIt);
+			__solution_storage->setRejection(solution, *elementPtrIt, action.newElementPtr);
 		}
 	};
 
@@ -546,7 +545,6 @@ void NativeResolverImpl::__post_apply_action(Solution& solution)
 	packageEntry.introducedBy = action.introducedBy;
 	__solution_storage->setPackageEntry(solution, action.newElementPtr,
 			std::move(packageEntry), action.oldElementPtr, action.brokenElementPriority+1);
-	solution.insertedElementPtrs.push_back(action.newElementPtr);
 
 	solution.pendingAction.reset();
 }
@@ -867,7 +865,7 @@ BrokenPairType __get_broken_pair(const SolutionStorage& solutionStorage,
 			brokenSuccessors.begin(), brokenSuccessors.end(), compareBrokenSuccessors);
 	if (bestBrokenSuccessorIt == brokenSuccessors.end())
 	{
-		return BrokenPairType{ NULL, {} };
+		return BrokenPairType{ NULL, { NULL, 0 } };
 	}
 	BrokenPairType result(NULL, *bestBrokenSuccessorIt);
 	for (auto reverseDependencyPtr: solutionStorage.getPredecessorElements(bestBrokenSuccessorIt->elementPtr))
