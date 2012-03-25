@@ -797,11 +797,19 @@ void stripArgumentQuotes(string& argument)
 void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 {
 	static size_t anonymousVariableId = 0;
-	if (*functionNamePtr == "piai")
-	{
-		__require_n_arguments(*argumentsPtr, 0);
-		*functionNamePtr = "package-is-automatically-installed";
+
+	{ // simple aliases
+		static map< string, string > aliases = {
+			{ "piai", "package-is-automatically-installed" }
+		};
+		auto it = aliases.find(*functionNamePtr);
+		if (it != aliases.end())
+		{
+			*functionNamePtr = it->second;
+			return;
+		}
 	}
+
 	if (*functionNamePtr == "package-with-dependencies")
 	{
 		__require_n_arguments(*argumentsPtr, 1);
