@@ -695,29 +695,29 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	// narrowing/widening
 	CONSTRUCT_FS("best", BestFS(binary, arguments))
 	// common
-	CONSTRUCT_FS("package", PackageNameFS(arguments))
-	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
-	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
-	CONSTRUCT_FS("priority", RegexMatchFS([](const SPCV& version)
+	CONSTRUCT_FS("package:name", PackageNameFS(arguments))
+	CONSTRUCT_FS("version:version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
+	CONSTRUCT_FS("version:maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
+	CONSTRUCT_FS("version:priority", RegexMatchFS([](const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
-	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
-	CONSTRUCT_FS("signed", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
-	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
-	CONSTRUCT_RELEASE_MEMBER_FS("archive", archive)
-	CONSTRUCT_RELEASE_MEMBER_FS("codename", codename)
-	CONSTRUCT_RELEASE_MEMBER_FS("component", component)
-	CONSTRUCT_RELEASE_MEMBER_FS("release-version", version)
-	CONSTRUCT_RELEASE_MEMBER_FS("vendor", vendor)
-	CONSTRUCT_RELEASE_MEMBER_FS("release-origin", baseUri)
+	CONSTRUCT_FS("version:section", RegexMatchFS(VERSION_MEMBER(section), arguments))
+	CONSTRUCT_FS("version:trusted", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
+	CONSTRUCT_FS("version:field", OtherFieldRegexMatchFS(arguments))
+	CONSTRUCT_RELEASE_MEMBER_FS("release:archive", archive)
+	CONSTRUCT_RELEASE_MEMBER_FS("release:codename", codename)
+	CONSTRUCT_RELEASE_MEMBER_FS("release:component", component)
+	CONSTRUCT_RELEASE_MEMBER_FS("release:version", version)
+	CONSTRUCT_RELEASE_MEMBER_FS("release:vendor", vendor)
+	CONSTRUCT_RELEASE_MEMBER_FS("release:origin", baseUri)
 	if (binary)
 	{
-		CONSTRUCT_FS("source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
-		CONSTRUCT_FS("source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
-		CONSTRUCT_FS("is-essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
-		CONSTRUCT_FS("is-installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
-		CONSTRUCT_FS("package-is-installed", PackageIsInstalledFS(arguments))
-		CONSTRUCT_FS("package-is-automatically-installed", PackageIsAutoInstalledFS(arguments))
+		CONSTRUCT_FS("version:source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
+		CONSTRUCT_FS("version:source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
+		CONSTRUCT_FS("version:essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
+		CONSTRUCT_FS("version:installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
+		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
+		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
 		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
 	}
@@ -800,7 +800,36 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 
 	{ // simple aliases
 		static map< string, string > aliases = {
-			{ "piai", "package-is-automatically-installed" }
+			{ "p:n", "package:name" },
+			{ "p:i", "package:installed" },
+			{ "p:ai", "package:automatically-installed" },
+
+			{ "v:v", "version:version" },
+			{ "v:m", "version:maintainer" },
+			{ "v:p", "version:priority" },
+			{ "v:s", "version:section" },
+			{ "v:t", "version:trusted" },
+			{ "v:f", "version:field" },
+			{ "v:sp", "version:source-package" },
+			{ "v:sv", "version:source-version" },
+			{ "v:e", "version:essential" },
+			{ "v:i", "version:installed" },
+
+			{ "vr:pd", "pre-depends" },
+			{ "vr:d", "depends" },
+			{ "vr:r", "recommends" },
+			{ "vr:s", "suggests" },
+			{ "vr:e", "enhances" },
+			{ "vr:c", "conflicts" },
+			{ "vr:b", "breaks" },
+			{ "vr:rp", "replaces" },
+
+			{ "r:a", "release:archive" },
+			{ "r:n", "release:codename" },
+			{ "r:c", "release:component" },
+			{ "r:v", "release:version" },
+			{ "r:o", "release:vendor" },
+			{ "r:u", "release:origin" },
 		};
 		auto it = aliases.find(*functionNamePtr);
 		if (it != aliases.end())
