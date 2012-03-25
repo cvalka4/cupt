@@ -793,10 +793,26 @@ void stripArgumentQuotes(string& argument)
 	}
 }
 
-void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
+void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 {
 	static size_t anonymousVariableId = 0;
 
+	if (*functionNamePtr == "package-with-dependencies")
+	{
+		__require_n_arguments(*argumentsPtr, 1);
+		*functionNamePtr = "recursive";
+		// TODO; add recommends
+		// TODO: allow calling 0-argument functions without trailing ()
+		auto variableName = format2("__anon%zu", anonymousVariableId++);
+		auto recursiveExpression = format2(
+				"best(and( or(pre-depends(%s()),depends(%s())) , package:installed() ))",
+				variableName, variableName);
+		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
+	}
+}
+
+void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
+{
 	{ // simple aliases
 		static map< string, string > aliases = {
 			{ "p:n", "package:name" },
@@ -838,18 +854,7 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 		}
 	}
 
-	if (*functionNamePtr == "package-with-dependencies")
-	{
-		__require_n_arguments(*argumentsPtr, 1);
-		*functionNamePtr = "recursive";
-		// TODO; add recommends
-		// TODO: allow calling 0-argument functions without trailing ()
-		auto variableName = format2("__anon%zu", anonymousVariableId);
-		auto recursiveExpression = format2(
-				"best(and( or(pre-depends(%s()),depends(%s())) , package-is-installed() ))",
-				variableName, variableName);
-		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
-	}
+	processNonTrivialAliases(functionNamePtr, argumentsPtr);
 }
 
 unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary)
