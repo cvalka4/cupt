@@ -796,6 +796,28 @@ void stripArgumentQuotes(string& argument)
 	}
 }
 
+void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
+{
+	static size_t anonymousVariableId = 0;
+	if (*functionNamePtr == "piai")
+	{
+		__require_n_arguments(*argumentsPtr, 0);
+		*functionNamePtr = "package-is-automatically-installed";
+	}
+	if (*functionNamePtr == "package-with-dependencies")
+	{
+		__require_n_arguments(*argumentsPtr, 1);
+		*functionNamePtr = "recursive";
+		// TODO; add recommends
+		// TODO: allow calling 0-argument functions without trailing ()
+		auto variableName = format2("__anon%zu", anonymousVariableId);
+		auto recursiveExpression = format2(
+				"best(and( or(pre-depends(%s()),depends(%s())) , package-is-installed() ))",
+				variableName, variableName);
+		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
+	}
+}
+
 unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary)
 {
 	try
@@ -821,6 +843,7 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 			trim(argument);
 			stripArgumentQuotes(argument);
 		}
+		processAliases(&functionName, &arguments);
 		return unique_ptr< CommonFS >(constructFSByName(functionName, arguments, binary));
 	}
 	catch (Exception&)
