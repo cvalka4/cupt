@@ -59,15 +59,15 @@ bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
 	}
 	return left->versionString < right->versionString;
 }
-struct SpcvLess
+struct SpcvGreater
 {
  private:
 	const Cache& __cache;
  public:
-	SpcvLess(const Cache& cache) : __cache(cache) {}
+	SpcvGreater(const Cache& cache) : __cache(cache) {}
 	bool operator()(const SPCV& left, const SPCV& right)
 	{
-		return __spcv_less(__cache, left, right);
+		return __spcv_less(__cache, right, left);
 	}
 };
 
@@ -228,7 +228,7 @@ FSResult __filter_through(const Cache& cache, const FSResult& versions, const Ve
 		FSResult result;
 		std::set_intersection(allowedVersions.begin(), allowedVersions.end(),
 				versions.begin(), versions.end(),
-				std::back_inserter(result), SpcvLess(cache));
+				std::back_inserter(result), SpcvGreater(cache));
 		return result;
 	}
 	else
@@ -239,8 +239,7 @@ FSResult __filter_through(const Cache& cache, const FSResult& versions, const Ve
 
 void __merge_fsresults(const Cache& cache, FSResult& main, FSResult&& other)
 {
-	SpcvLess spcvLess(cache);
-	main.merge(std::move(other), spcvLess);
+	main.merge(std::move(other), SpcvGreater(cache));
 	main.unique(PointerEqual< const Version >());
 }
 
@@ -352,7 +351,7 @@ class NotFS: public AlgeFS
 		FSResult result;
 		std::set_difference(fromVersions.begin(), fromVersions.end(),
 				notVersions.begin(), notVersions.end(),
-				std::back_inserter(result), SpcvLess(cache));
+				std::back_inserter(result), SpcvGreater(cache));
 		return result;
 	}
 };
@@ -375,7 +374,7 @@ class XorFS: public AlgeFS
 		FSResult result;
 		std::set_symmetric_difference(leftVersions.begin(), leftVersions.end(),
 				rightVersions.begin(), rightVersions.end(),
-				std::back_inserter(result), SpcvLess(cache));
+				std::back_inserter(result), SpcvGreater(cache));
 		return result;
 	}
 };
@@ -593,7 +592,6 @@ class RecursiveFS: public CommonFS
 	}
 	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
-		SpcvLess spcvLess(cache);
 		FSResult result;
 
 		FSResult variableValue = __initial_variable_value_fs->select(cache, from.getUnfiltered());
@@ -625,14 +623,14 @@ class DependencyFS: public TransformFS
  protected:
 	FSResult _transform(const Cache& cache, const SPCV& version) const
 	{
-		SpcvLess spcvLess(cache);
+		SpcvGreater spcvGreater(cache);
 		FSResult result;
 
 		auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
 		for (const auto& relationExpression: binaryVersion->relations[__relation_type])
 		{
 			auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
-			std::sort(satisfyingVersions.begin(), satisfyingVersions.end(), spcvLess);
+			std::sort(satisfyingVersions.begin(), satisfyingVersions.end(), spcvGreater);
 			list< SPCV > sortedList;
 			std::move(satisfyingVersions.begin(), satisfyingVersions.end(),
 					std::back_inserter(sortedList));
