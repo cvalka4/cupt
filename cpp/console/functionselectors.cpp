@@ -719,6 +719,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
 		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
+		CONSTRUCT_FS("recommends", DependencyFS(BinaryVersion::RelationTypes::Recommends, arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
@@ -805,8 +806,8 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 		// TODO: allow calling 0-argument functions without trailing ()
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
-				"best(and( or(pre-depends(%s()),depends(%s())) , package:installed() ))",
-				variableName, variableName);
+				"best(and( or(vr:pd(%s()),vr:d(%s()),vr:r(%s())) , package:installed() ))",
+				variableName, variableName, variableName);
 		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
 	}
 }
