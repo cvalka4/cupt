@@ -866,18 +866,30 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 		{
 			fatal2(__("query cannot be empty"));
 		}
+
+		string functionName;
+		vector< string > arguments;
+
 		auto argumentsPosition = query.find_first_of("()");
-		if (query[argumentsPosition] == ')')
+		if (argumentsPosition == string::npos)
 		{
-			fatal2(__("closing bracket ')' doesn't have a corresponding opening bracket '('"));
+			functionName = query; // assume that the function takes no parameters
 		}
-		// now we know it's surely '('
-		if (query.back() != ')')
+		else
 		{
-			fatal2(__("the last query character is not a closing bracket ')'"));
+			if (query[argumentsPosition] == ')')
+			{
+				fatal2(__("closing bracket ')' doesn't have a corresponding opening bracket '('"));
+			}
+			// now we know it's surely '('
+			if (query.back() != ')')
+			{
+				fatal2(__("the last query character is not a closing bracket ')'"));
+			}
+			functionName = query.substr(0, argumentsPosition);
+			arguments = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
 		}
-		string functionName = query.substr(0, argumentsPosition);
-		auto arguments = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+
 		for (string& argument: arguments)
 		{
 			trim(argument);
