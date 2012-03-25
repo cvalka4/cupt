@@ -39,11 +39,11 @@ typedef list< SPCV > FSResult;
 
 bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
 {
-	if (left->packageName < right->packageName)
+	if (left->packageName > right->packageName)
 	{
 		return true;
 	}
-	if (left->packageName > right->packageName)
+	if (left->packageName < right->packageName)
 	{
 		return false;
 	}
