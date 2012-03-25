@@ -775,6 +775,16 @@ vector< string > split(const string& input)
 	return result;
 }
 
+void trim(string& s)
+{
+	if (s.size() > 0)
+	{
+		auto firstValuablePosition = s.find_first_not_of(' ');
+		auto lastValuablePosition = s.find_last_not_of(' ');
+		s = s.substr(firstValuablePosition, lastValuablePosition - firstValuablePosition + 1);
+	}
+}
+
 void stripArgumentQuotes(string& argument)
 {
 	if (argument.size() >= 2)
@@ -808,6 +818,7 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 		auto arguments = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
 		for (string& argument: arguments)
 		{
+			trim(argument);
 			stripArgumentQuotes(argument);
 		}
 		return unique_ptr< CommonFS >(constructFSByName(functionName, arguments, binary));
