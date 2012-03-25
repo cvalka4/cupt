@@ -28,5 +28,7 @@ using namespace cupt::cache;
 using namespace cupt::system;
 using namespace cupt::download;
 
+bool isPackageInstalled(const Cache&, const string& packageName);
+
 #endif
 

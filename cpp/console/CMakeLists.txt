@@ -1,5 +1,6 @@
 include_directories(../lib/include)
 add_executable(cupt.bin
+	common.cpp
 	cupt.cpp
 	misc.cpp
 	handlers/search.cpp

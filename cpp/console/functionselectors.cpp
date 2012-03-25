@@ -21,6 +21,7 @@
 #include <cupt/cache/binarypackage.hpp>
 #include <cupt/cache/sourcepackage.hpp>
 #include <cupt/cache/binaryversion.hpp>
+#include <cupt/system/state.hpp>
 
 #include "functionselectors.hpp"
 
@@ -414,12 +415,12 @@ class OrFS: public AlgeFS
 class PredicateFS: public CommonFS
 {
  protected:
-	virtual bool _match(const SPCV& version) const = 0;
+	virtual bool _match(const Cache&, const SPCV&) const = 0;
  public:
-	FSResult select(const Cache&, const VersionSet& from) const
+	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
 		FSResult result = from.get();
-		result.remove_if([this](const SPCV& version) { return !this->_match(version); });
+		result.remove_if([this, &cache](const SPCV& version) { return !this->_match(cache, version); });
 		return result;
 	}
 };
@@ -480,7 +481,7 @@ class RegexMatchFS: public PredicateFS
 		: __get_attribute(getAttribute), __regex_matcher(arguments)
 	{}
  protected:
-	bool _match(const SPCV& version) const
+	bool _match(const Cache&, const SPCV& version) const
 	{
 		return __regex_matcher.match(__get_attribute(version));
 	}
@@ -495,7 +496,7 @@ class SourceRegexMatchFS: public PredicateFS
 		: __get_source_attribute(getter), __regex_matcher(arguments)
 	{}
  protected:
-	bool _match(const SPCV& version) const
+	bool _match(const Cache&, const SPCV& version) const
 	{
 		for (const auto& source: version->sources)
 		{
@@ -517,7 +518,7 @@ class BoolMatchFS: public PredicateFS
 	{
 		__require_n_arguments(arguments, 0);
 	}
-	bool _match(const SPCV& version) const
+	bool _match(const Cache&, const SPCV& version) const
 	{
 		return __get_attribute(version);
 	}
@@ -641,6 +642,34 @@ class DependencyFS: public TransformFS
 	}
 };
 
+class PackageIsInstalledFS: public PredicateFS
+{
+ protected:
+	bool _match(const Cache& cache, const SPCV& version) const
+	{
+		return isPackageInstalled(cache, version->packageName);
+	}
+ public:
+	PackageIsInstalledFS(const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 0);
+	}
+};
+
+class PackageIsAutoInstalledFS: public PredicateFS
+{
+ protected:
+	bool _match(const Cache& cache, const SPCV& version) const
+	{
+		return cache.isAutomaticallyInstalled(version->packageName);
+	}
+ public:
+	PackageIsAutoInstalledFS(const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 0);
+	}
+};
+
 ///
 
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
@@ -689,6 +718,8 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
 		CONSTRUCT_FS("is-essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 		CONSTRUCT_FS("is-installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
+		CONSTRUCT_FS("package-is-installed", PackageIsInstalledFS(arguments))
+		CONSTRUCT_FS("package-is-automatically-installed", PackageIsAutoInstalledFS(arguments))
 		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
 		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
 	}

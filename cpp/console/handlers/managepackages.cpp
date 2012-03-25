@@ -191,8 +191,7 @@ static void processInstallOrRemoveExpression(const shared_ptr< const Cache >& ca
 		{
 			if (mode == ManagePackages::InstallIfInstalled)
 			{
-				auto&& installedInfo = cache->getSystemState()->getInstalledInfo(version->packageName);
-				if (!installedInfo || installedInfo->status == system::State::InstalledRecord::Status::ConfigFiles)
+				if (!isPackageInstalled(*cache, version->packageName))
 				{
 					continue;
 				}
