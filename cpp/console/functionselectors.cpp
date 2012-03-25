@@ -806,7 +806,7 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 		// TODO: allow calling 0-argument functions without trailing ()
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
-				"best(and( or(vr:pd(%s()),vr:d(%s()),vr:r(%s())) , package:installed() ))",
+				"best(and( or(vr:pd(%s),vr:d(%s),vr:r(%s)) , package:installed ))",
 				variableName, variableName, variableName);
 		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
 	}
