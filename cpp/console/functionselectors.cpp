@@ -599,7 +599,6 @@ class RecursiveFS: public CommonFS
 		do
 		{
 			previousResultSize = result.size();
-			debug2("s: %zu", previousResultSize);
 
 			VersionSet iterationSet = from.getUnfiltered();
 			iterationSet.setVariable(__variable_name, std::move(variableValue));
