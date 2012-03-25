@@ -243,6 +243,23 @@ void __merge_fsresults(const Cache& cache, FSResult& main, FSResult&& other)
 	main.unique(PointerEqual< const Version >());
 }
 
+class BestFS: public CommonFS
+{
+	unique_ptr< CommonFS > __leaf_fs;
+ public:
+	BestFS(bool binary, const Arguments& arguments)
+	{
+		__require_n_arguments(arguments, 1);
+		__leaf_fs = internalParseFunctionQuery(arguments[0], binary);
+	}
+	FSResult select(const Cache& cache, const VersionSet& from) const
+	{
+		auto result = __leaf_fs->select(cache, from);
+		result.unique([](const SPCV& left, const SPCV& right) { return left->packageName == right->packageName; });
+		return result;
+	}
+};
+
 class DefineVariableFS: public CommonFS
 {
 	string __name;
@@ -648,6 +665,8 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("or", OrFS(binary, arguments))
 	CONSTRUCT_FS("not", NotFS(binary, arguments))
 	CONSTRUCT_FS("xor", XorFS(binary, arguments))
+	// narrowing/widening
+	CONSTRUCT_FS("best", BestFS(binary, arguments))
 	// common
 	CONSTRUCT_FS("package", PackageNameFS(arguments))
 	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
