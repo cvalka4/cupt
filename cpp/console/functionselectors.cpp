@@ -824,7 +824,7 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 		// TODO: allow calling 0-argument functions without trailing ()
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
-				"best(and( or(vr:pd(%s),vr:d(%s),vr:r(%s)) , package:installed ))",
+				"best(and( or(y:pd(%s),y:d(%s),y:r(%s)) , package:installed ))",
 				variableName, variableName, variableName);
 		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
 	}
@@ -850,14 +850,14 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "v:i", "version:installed" },
 			{ "v:d", "version:description" },
 
-			{ "vr:pd", "pre-depends" },
-			{ "vr:d", "depends" },
-			{ "vr:r", "recommends" },
-			{ "vr:s", "suggests" },
-			{ "vr:e", "enhances" },
-			{ "vr:c", "conflicts" },
-			{ "vr:b", "breaks" },
-			{ "vr:rp", "replaces" },
+			{ "y:pd", "pre-depends" },
+			{ "y:d", "depends" },
+			{ "y:r", "recommends" },
+			{ "y:s", "suggests" },
+			{ "y:e", "enhances" },
+			{ "y:c", "conflicts" },
+			{ "y:b", "breaks" },
+			{ "y:rp", "replaces" },
 
 			{ "r:a", "release:archive" },
 			{ "r:n", "release:codename" },
