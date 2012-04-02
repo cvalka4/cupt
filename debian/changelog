@@ -22,6 +22,12 @@ cupt (2.5.0~) UNRELEASED; urgency=low
       - New option 'cupt::resolver::score::removal-of-autoinstalled'.
       - Lowed a bit the default value of the option
         'cupt::resolver::score::removal'.
+      - Parsing configuration files: fixed ignoring the incorrect syntax
+        before the end of file in some cases.
+      - Parsing configuration files: in the case of a syntax error print the
+        line number and character number instead of the part of context string.
+      - 'setScalar', 'setList': don't print warnings anymore for unknown
+        non-Cupt-specific options (those which names don't start with 'cupt::')
     - download/progresses/console:
       - Status line: leave the cursor at the end of line so anynchronous
         warning and error messages are printed on the next line, not over the
@@ -43,6 +49,8 @@ cupt (2.5.0~) UNRELEASED; urgency=low
         an alias instead of the full path in the error and warning messages.
       - Constructor: parsing index localization files: print an error when
         the file exists but can't be opened.
+      - Parsing release files: don't warn anymore if the 'archive' or 'vendor'
+        fields are missing.
     - Don't include a not exported header from cupt/common.hpp, making a
       development binary package usable again. Fixes a regression since
       2.3.0~rc1.
@@ -54,6 +62,7 @@ cupt (2.5.0~) UNRELEASED; urgency=low
       - User-Agent now has a libcupt-specific suffix.
     - curl:
       - User-Agent now has a libcupt-specific suffix. (Closes: #663381)
+  * Improvements in the error and warning messages.
   * debian:
     - libcupt2-0.shlibs: added with an initial value of 2.3.0~rc1.
     - shlibs.local: added as an alias to above.

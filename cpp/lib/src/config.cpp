@@ -92,6 +92,8 @@ void ConfigImpl::initializeVariables()
 		{ "gpgv::trustedkeyring", "/var/lib/cupt/trusted.gpg" },
 		{ "quiet", "0" }, // bool, '0' instead of 'no' for apt-listchanges (#604130)
 
+		// TODO/API break/: remove unused APT scalar&list variables as don't
+		// warn about unknown variables anymore
 		// unused APT vars
 		{ "apt::cache-limit", "0" },
 		{ "apt::get::show-upgraded", "no" },
@@ -526,6 +528,11 @@ vector< string > Config::getList(const string& optionName) const
 	__builtin_unreachable();
 }
 
+bool __is_cupt_option(const string& optionName)
+{
+	return optionName.size() >= 6 && optionName.compare(0, 6, "cupt::") == 0;
+}
+
 void Config::setScalar(const string& optionName, const string& value)
 {
 	string normalizedOptionName = optionName;
@@ -551,7 +558,10 @@ void Config::setScalar(const string& optionName, const string& value)
 	}
 	else
 	{
-		warn2(__("an attempt to set the wrong scalar option '%s'"), optionName);
+		if (__is_cupt_option(optionName))
+		{
+			warn2(__("an attempt to set the wrong scalar option '%s'"), optionName);
+		}
 	}
 }
 
@@ -569,7 +579,10 @@ void Config::setList(const string& optionName, const string& value)
 	}
 	else
 	{
-		warn2(__("an attempt to set the wrong list option '%s'"), optionName);
+		if (__is_cupt_option(optionName))
+		{
+			warn2(__("an attempt to set the wrong list option '%s'"), optionName);
+		}
 	}
 }
 

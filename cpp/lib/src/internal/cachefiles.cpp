@@ -378,7 +378,7 @@ string getPathOfExtendedStates(const Config& config)
 	return config.getPath("dir::state::extendedstates");
 }
 
-bool verifySignature(const Config& config, const string& path)
+bool verifySignature(const Config& config, const string& path, const string& alias)
 {
 	auto debugging = config.getBool("debug::gpgv");
 	if (debugging)
@@ -477,14 +477,14 @@ bool verifySignature(const Config& config, const string& path)
 		if (status.empty())
 		{
 			// no info from gpg at all
-			fatal2(__("gpg: '%s': no information"), path);
+			fatal2(__("gpg: '%s': no information"), alias);
 		}
 
 		// first line ought to be validness indicator
 		static const sregex messageRegex = sregex::compile("(\\w+) (.*)");
 		if (!regex_match(status, m, messageRegex))
 		{
-			fatal2(__("gpg: '%s': invalid status string '%s'"), path, status);
+			fatal2(__("gpg: '%s': invalid status string '%s'"), alias, status);
 		}
 
 		string messageType = m[1];
@@ -495,7 +495,7 @@ bool verifySignature(const Config& config, const string& path)
 			string furtherInfo = gpgGetLine();
 			if (!regex_match(furtherInfo, m, messageRegex))
 			{
-				fatal2(__("gpg: '%s': invalid detailed information string '%s'"), path, furtherInfo);
+				fatal2(__("gpg: '%s': invalid detailed information string '%s'"), alias, furtherInfo);
 			}
 
 			string furtherInfoType = m[1];
@@ -507,24 +507,24 @@ bool verifySignature(const Config& config, const string& path)
 			}
 			else if (furtherInfoType == "EXPSIG")
 			{
-				warn2(__("gpg: '%s': expired signature: %s"), path, furtherInfoMessage);
+				warn2(__("gpg: '%s': expired signature: %s"), alias, furtherInfoMessage);
 			}
 			else if (furtherInfoType == "EXPKEYSIG")
 			{
-				warn2(__("gpg: '%s': expired key: %s"), path, furtherInfoMessage);
+				warn2(__("gpg: '%s': expired key: %s"), alias, furtherInfoMessage);
 			}
 			else if (furtherInfoType == "REVKEYSIG")
 			{
-				warn2(__("gpg: '%s': revoked key: %s"), path, furtherInfoMessage);
+				warn2(__("gpg: '%s': revoked key: %s"), alias, furtherInfoMessage);
 			}
 			else
 			{
-				warn2(__("gpg: '%s': unknown error: %s %s"), path, furtherInfoType, furtherInfoMessage);
+				warn2(__("gpg: '%s': unknown error: %s %s"), alias, furtherInfoType, furtherInfoMessage);
 			}
 		}
 		else if (messageType == "BADSIG")
 		{
-			warn2(__("gpg: '%s': bad signature: %s"), path, message);
+			warn2(__("gpg: '%s': bad signature: %s"), alias, message);
 		}
 		else if (messageType == "ERRSIG")
 		{
@@ -537,7 +537,7 @@ bool verifySignature(const Config& config, const string& path)
 			{
 				if (!regex_match(detail, m, messageRegex))
 				{
-					fatal2(__("gpg: '%s': invalid detailed information string '%s'"), path, detail);
+					fatal2(__("gpg: '%s': invalid detailed information string '%s'"), alias, detail);
 				}
 				string detailType = m[1];
 				string detailMessage = m[2];
@@ -549,32 +549,32 @@ bool verifySignature(const Config& config, const string& path)
 					//
 					// NO_PUBKEY D4F5CE00FA0E9B9D
 					//
-					warn2(__("gpg: '%s': public key '%s' is not found"), path, detailMessage);
+					warn2(__("gpg: '%s': public key '%s' is not found"), alias, detailMessage);
 				}
 			}
 
 			if (!publicKeyWasNotFound)
 			{
-				warn2(__("gpg: '%s': could not verify a signature: %s"), path, message);
+				warn2(__("gpg: '%s': could not verify a signature: %s"), alias, message);
 			}
 		}
 		else if (messageType == "NODATA")
 		{
 			// no signature
-			warn2(__("gpg: '%s': empty signature"), path);
+			warn2(__("gpg: '%s': empty signature"), alias);
 		}
 		else if (messageType == "KEYEXPIRED")
 		{
-			warn2(__("gpg: '%s': expired key: %s"), path, message);
+			warn2(__("gpg: '%s': expired key: %s"), alias, message);
 		}
 		else
 		{
-			warn2(__("gpg: '%s': unknown message: %s %s"), path, messageType, message);
+			warn2(__("gpg: '%s': unknown message: %s %s"), alias, messageType, message);
 		}
 	}
 	catch (Exception&)
 	{
-		warn2(__("unable to verify a signature for the file '%s'"), path);
+		warn2(__("unable to verify a signature for the '%s'"), alias);
 	}
 
 	if (debugging)
@@ -591,18 +591,17 @@ shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config,
 	result->notAutomatic = false; // default
 	result->butAutomaticUpgrades = false; // default
 
-	string openError;
-	File file(path, "r", openError);
-	if (!openError.empty())
-	{
-		fatal2(__("unable to open release file '%s': %s"), path, openError);
-	}
-
-	size_t lineNumber = 1;
 	static sregex fieldRegex = sregex::compile("^((?:\\w|-)+?): (.*)"); // $ implied in regex
 	smatch matches;
 	try
 	{
+		string openError;
+		File file(path, "r", openError);
+		if (!openError.empty())
+		{
+			fatal2(__("unable to open the file '%s': %s"), path, openError);
+		}
+
 		string line;
 		while (! file.getLine(line).eof())
 		{
@@ -666,20 +665,10 @@ shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config,
 				}
 			}
 		}
-		++lineNumber;
 	}
 	catch (Exception&)
 	{
-		fatal2(__("error parsing release '%s', line %u"), alias, lineNumber);
-	}
-
-	if (result->vendor.empty())
-	{
-		warn2(__("no vendor specified in release '%s'"), alias);
-	}
-	if (result->archive.empty())
-	{
-		warn2(__("no archive specified in release '%s'"), alias);
+		fatal2(__("unable to parse the release '%s'"), alias);
 	}
 
 	{ // checking Valid-Until
@@ -702,12 +691,12 @@ shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config,
 				{
 					bool warnOnly = config.getBool("cupt::cache::release-file-expiration::ignore");
 					(warnOnly ? warn2< string, string > : fatal2< string, string >)
-							(__("release '%s' has expired (expiry time '%s')"), alias, result->validUntilDate);
+							(__("the release '%s' has expired (expiry time '%s')"), alias, result->validUntilDate);
 				}
 			}
 			else
 			{
-				warn2(__("unable to parse expiry time '%s' in release '%s'"),
+				warn2(__("unable to parse the expiry time '%s' in the release '%s'"),
 						result->validUntilDate, alias);
 			}
 		}

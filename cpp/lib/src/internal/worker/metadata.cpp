@@ -136,7 +136,7 @@ bool generateUncompressingSub(const download::Uri& uri, const string& downloadPa
 
 		if (::system(format2("which %s >/dev/null", uncompressorName).c_str()))
 		{
-			warn2(__("'%s' uncompressor is not available, not downloading '%s'"),
+			warn2(__("the '%s' uncompressor is not available, not downloading '%s'"),
 					uncompressorName, string(uri));
 			return false;
 		}
@@ -149,7 +149,7 @@ bool generateUncompressingSub(const download::Uri& uri, const string& downloadPa
 			unlink(downloadPath.c_str());
 			if (uncompressingResult)
 			{
-				return format2(__("failed to uncompress '%s', '%s' returned error %d"),
+				return format2(__("failed to uncompress '%s', '%s' returned the error %d"),
 						downloadPath, uncompressorName, uncompressingResult);
 			}
 			return string(); // success
@@ -286,10 +286,8 @@ bool MetadataWorker::__update_release(download::Manager& downloadManager,
 				return moveError;
 			}
 
-			if (!cachefiles::verifySignature(*_config, targetPath))
+			if (!cachefiles::verifySignature(*_config, targetPath, longAlias))
 			{
-				warn2(__("signature verification for '%s' failed"), longAlias);
-
 				if (!_config->getBool("cupt::update::keep-bad-signatures"))
 				{
 					// for compatibility with APT tools delete the downloaded file
@@ -436,12 +434,12 @@ bool __download_and_apply_patches(download::Manager& downloadManager,
 			if (wantedHashSum.empty())
 			{
 				logger->loggedFatal2(Logger::Subsystem::Metadata, 3,
-						piddedFormat2, "failed to find wanted hash sum");
+						piddedFormat2, "failed to find the target hash sum");
 			}
 		}
 		if (unlink(diffIndexPath.c_str()) == -1)
 		{
-			warn2(__("unable to remove a temporary index file '%s'"), diffIndexPath);
+			warn2(__("unable to remove the file '%s'"), diffIndexPath);
 		}
 
 		HashSums subTargetHashSums;
@@ -533,7 +531,7 @@ bool __download_and_apply_patches(download::Manager& downloadManager,
 			 out:
 				if (unlink(unpackedPath.c_str()) == -1)
 				{
-					warn2e(__("unable to remove partial index patch file '%s'"), unpackedPath);
+					warn2e(__("unable to remove the file '%s'"), unpackedPath);
 				}
 				return result;
 			};
@@ -624,7 +622,7 @@ bool MetadataWorker::__download_index(download::Manager& downloadManager,
 		{
 			if (unlink(downloadPath.c_str()) == -1)
 			{
-				warn2e(__("unable to remove partial index file '%s'"), downloadPath);
+				warn2e(__("unable to remove the file '%s'"), downloadPath);
 			}
 			return __("hash sums mismatch");
 		}
@@ -779,7 +777,7 @@ bool MetadataWorker::__download_translations(download::Manager& downloadManager,
 		auto fail = [localizationIndexLongAlias, &cleanUp]()
 		{
 			cleanUp();
-			warn2(__("failed to parse localization info from '%s'"), localizationIndexLongAlias);
+			warn2(__("failed to parse localization data from '%s'"), localizationIndexLongAlias);
 		};
 
 		try
@@ -975,7 +973,7 @@ void MetadataWorker::__list_cleanup(const string& lockPath)
 			{
 				if (unlink(fileIt->c_str()) == -1)
 				{
-					warn2e(__("unable to remove '%s'"), *fileIt);
+					warn2e(__("unable to remove the file '%s'"), *fileIt);
 				}
 			}
 		}
@@ -1033,7 +1031,7 @@ void MetadataWorker::updateReleaseAndIndexData(const shared_ptr< download::Progr
 				if (mkdir(partialIndexesDirectory.c_str(), 0755) == -1)
 				{
 					_logger->loggedFatal2(Logger::Subsystem::Metadata, 2,
-							format2e, "unable to create partial directory '%s'", partialIndexesDirectory);
+							format2e, "unable to create the directory '%s'", partialIndexesDirectory);
 				}
 			}
 		}
