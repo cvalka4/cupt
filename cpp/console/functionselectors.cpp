@@ -737,6 +737,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
 		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
 		CONSTRUCT_FS("recommends", DependencyFS(BinaryVersion::RelationTypes::Recommends, arguments))
+		CONSTRUCT_FS("suggests", DependencyFS(BinaryVersion::RelationTypes::Suggests, arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
