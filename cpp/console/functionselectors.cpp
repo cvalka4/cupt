@@ -911,7 +911,11 @@ unique_ptr< FS > parseFunctionQuery(const string& query, bool binary)
 {
 	Cache::memoize = true;
 	Package::memoize = true;
-	auto result = internalParseFunctionQuery(query, binary);
+
+	auto trimmedQuery = query;
+	trim(trimmedQuery);
+	auto result = internalParseFunctionQuery(trimmedQuery, binary);
+
 	if (binary)
 	{
 		unique_ptr< CommonFS > newResult(new BinaryTagDummyFS(std::move(result)));
