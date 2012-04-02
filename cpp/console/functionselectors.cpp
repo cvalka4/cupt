@@ -775,10 +775,11 @@ vector< string > split(const string& input)
 
 void trim(string& s)
 {
+	const char* trimmedCharacters = " \n";
 	if (s.size() > 0)
 	{
-		auto firstValuablePosition = s.find_first_not_of(' ');
-		auto lastValuablePosition = s.find_last_not_of(' ');
+		auto firstValuablePosition = s.find_first_not_of(trimmedCharacters);
+		auto lastValuablePosition = s.find_last_not_of(trimmedCharacters);
 		s = s.substr(firstValuablePosition, lastValuablePosition - firstValuablePosition + 1);
 	}
 }
