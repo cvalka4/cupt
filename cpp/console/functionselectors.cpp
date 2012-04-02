@@ -681,6 +681,10 @@ namespace attr
 
 		return shortDescription + longDescription;
 	}
+	string priority(const Cache&, const SPCV& version)
+	{
+		return Version::Priorities::strings[version->priority];
+	}
 }
 
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
@@ -711,9 +715,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("package:name", PackageNameFS(arguments))
 	CONSTRUCT_FS("version:version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
 	CONSTRUCT_FS("version:maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
-	CONSTRUCT_FS("version:priority", RegexMatchFS([](const Cache&, const SPCV& version)
-			{ return Version::Priorities::strings[version->priority]; }
-			, arguments))
+	CONSTRUCT_FS("version:priority", RegexMatchFS(attr::priority, arguments))
 	CONSTRUCT_FS("version:section", RegexMatchFS(VERSION_MEMBER(section), arguments))
 	CONSTRUCT_FS("version:trusted", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
 	CONSTRUCT_FS("version:field", OtherFieldRegexMatchFS(arguments))
