@@ -473,16 +473,16 @@ class PackageNameFS: public CommonFS
 
 class RegexMatchFS: public PredicateFS
 {
-	std::function< string (const SPCV&) > __get_attribute;
+	std::function< string (const Cache&, const SPCV&) > __get_attribute;
 	RegexMatcher __regex_matcher;
  public:
 	RegexMatchFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
 		: __get_attribute(getAttribute), __regex_matcher(arguments)
 	{}
  protected:
-	bool _match(const Cache&, const SPCV& version) const
+	bool _match(const Cache& cache, const SPCV& version) const
 	{
-		return __regex_matcher.match(__get_attribute(version));
+		return __regex_matcher.match(__get_attribute(cache, version));
 	}
 };
 
@@ -510,16 +510,16 @@ class SourceRegexMatchFS: public PredicateFS
 
 class BoolMatchFS: public PredicateFS
 {
-	std::function< bool (const SPCV&) > __get_attribute;
+	std::function< bool (const Cache&, const SPCV&) > __get_attribute;
  public:
 	BoolMatchFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
 		: __get_attribute(getAttribute)
 	{
 		__require_n_arguments(arguments, 0);
 	}
-	bool _match(const Cache&, const SPCV& version) const
+	bool _match(const Cache& cache, const SPCV& version) const
 	{
-		return __get_attribute(version);
+		return __get_attribute(cache, version);
 	}
 };
 
@@ -533,7 +533,7 @@ class OtherFieldRegexMatchFS: public RegexMatchFS
 	}
  public:
 	OtherFieldRegexMatchFS(const Arguments& arguments)
-		: RegexMatchFS([this](const SPCV& version) -> string
+		: RegexMatchFS([this](const Cache&, const SPCV& version) -> string
 				{
 					if (!version->others)
 					{
@@ -669,11 +669,25 @@ class PackageIsAutoInstalledFS: public PredicateFS
 
 ///
 
+namespace attr
+{
+	string description(const Cache& cache, const SPCV& version)
+	{
+		auto v = static_pointer_cast< const BinaryVersion >(version);
+		// TODO/API break/: make it return one, localized if possible, always non-empty string
+		auto descriptions = cache.getLocalizedDescriptions(v);
+		const string& shortDescription = descriptions.first.empty() ? v->shortDescription : descriptions.first;
+		const string& longDescription = descriptions.second.empty() ? v->longDescription : descriptions.second;
+
+		return shortDescription + longDescription;
+	}
+}
+
 CommonFS* constructFSByName(const string& functionName, const CommonFS::Arguments& arguments, bool binary)
 {
-	#define VERSION_MEMBER(member) [](const SPCV& version) { return version-> member; }
+	#define VERSION_MEMBER(member) [](const Cache&, const SPCV& version) { return version-> member; }
 	#define VERSION_RELEASE_MEMBER(member) [](const Version::Source& source) { return source.release-> member; }
-	#define BINARY_VERSION_MEMBER(member) [](const SPCV& version) \
+	#define BINARY_VERSION_MEMBER(member) [](const Cache&, const SPCV& version) \
 			{ return static_cast< const BinaryVersion* >(version.get())-> member; }
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define CONSTRUCT_RELEASE_MEMBER_FS(name, member) \
@@ -697,7 +711,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("package:name", PackageNameFS(arguments))
 	CONSTRUCT_FS("version:version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
 	CONSTRUCT_FS("version:maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
-	CONSTRUCT_FS("version:priority", RegexMatchFS([](const SPCV& version)
+	CONSTRUCT_FS("version:priority", RegexMatchFS([](const Cache&, const SPCV& version)
 			{ return Version::Priorities::strings[version->priority]; }
 			, arguments))
 	CONSTRUCT_FS("version:section", RegexMatchFS(VERSION_MEMBER(section), arguments))
@@ -715,6 +729,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("version:source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
 		CONSTRUCT_FS("version:essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 		CONSTRUCT_FS("version:installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
+		CONSTRUCT_FS("version:description", RegexMatchFS(attr::description, arguments))
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
