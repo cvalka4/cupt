@@ -738,6 +738,8 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
 		CONSTRUCT_FS("recommends", DependencyFS(BinaryVersion::RelationTypes::Recommends, arguments))
 		CONSTRUCT_FS("suggests", DependencyFS(BinaryVersion::RelationTypes::Suggests, arguments))
+		CONSTRUCT_FS("conflicts", DependencyFS(BinaryVersion::RelationTypes::Conflicts, arguments))
+		CONSTRUCT_FS("breaks", DependencyFS(BinaryVersion::RelationTypes::Breaks, arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
