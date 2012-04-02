@@ -848,6 +848,7 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "v:sv", "version:source-version" },
 			{ "v:e", "version:essential" },
 			{ "v:i", "version:installed" },
+			{ "v:d", "version:description" },
 
 			{ "vr:pd", "pre-depends" },
 			{ "vr:d", "depends" },
