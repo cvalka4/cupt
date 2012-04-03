@@ -800,8 +800,17 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("suggests", DependencyFS(BRT::Suggests, arguments))
 		CONSTRUCT_FS("conflicts", DependencyFS(BRT::Conflicts, arguments))
 		CONSTRUCT_FS("breaks", DependencyFS(BRT::Breaks, arguments))
+		CONSTRUCT_FS("replaces", DependencyFS(BRT::Replaces, arguments))
 		CONSTRUCT_FS("enhances", DependencyFS(BRT::Enhances, arguments))
+		CONSTRUCT_FS("reverse-pre-depends", ReverseDependencyFS(BRT::PreDepends, arguments))
 		CONSTRUCT_FS("reverse-depends", ReverseDependencyFS(BRT::Depends, arguments))
+		CONSTRUCT_FS("reverse-recommends", ReverseDependencyFS(BRT::Recommends, arguments))
+		CONSTRUCT_FS("reverse-suggests", ReverseDependencyFS(BRT::Suggests, arguments))
+		CONSTRUCT_FS("reverse-conflicts", ReverseDependencyFS(BRT::Conflicts, arguments))
+		CONSTRUCT_FS("reverse-breaks", ReverseDependencyFS(BRT::Breaks, arguments))
+		CONSTRUCT_FS("reverse-enhances", ReverseDependencyFS(BRT::Enhances, arguments))
+		CONSTRUCT_FS("reverse-replaces", ReverseDependencyFS(BRT::Replaces, arguments))
+
 		CONSTRUCT_FS("provides", ProvidesFS(arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
