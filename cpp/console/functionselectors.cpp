@@ -36,6 +36,7 @@ namespace {
 typedef FunctionSelector FS;
 typedef shared_ptr< const Version > SPCV;
 typedef list< SPCV > FSResult;
+typedef BinaryVersion::RelationTypes BRT;
 
 bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
 {
@@ -643,9 +644,9 @@ class RecursiveFS: public CommonFS
 
 class DependencyFS: public TransformFS
 {
-	const BinaryVersion::RelationTypes::Type __relation_type;
+	const BRT::Type __relation_type;
  public:
-	DependencyFS(BinaryVersion::RelationTypes::Type relationType, const Arguments& arguments)
+	DependencyFS(BRT::Type relationType, const Arguments& arguments)
 		: TransformFS(true, arguments), __relation_type(relationType)
 	{}
  protected:
@@ -763,13 +764,13 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("version:description", RegexMatchFS(attr::description, arguments))
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
-		CONSTRUCT_FS("pre-depends", DependencyFS(BinaryVersion::RelationTypes::PreDepends, arguments))
-		CONSTRUCT_FS("depends", DependencyFS(BinaryVersion::RelationTypes::Depends, arguments))
-		CONSTRUCT_FS("recommends", DependencyFS(BinaryVersion::RelationTypes::Recommends, arguments))
-		CONSTRUCT_FS("suggests", DependencyFS(BinaryVersion::RelationTypes::Suggests, arguments))
-		CONSTRUCT_FS("conflicts", DependencyFS(BinaryVersion::RelationTypes::Conflicts, arguments))
-		CONSTRUCT_FS("breaks", DependencyFS(BinaryVersion::RelationTypes::Breaks, arguments))
-		CONSTRUCT_FS("enhances", DependencyFS(BinaryVersion::RelationTypes::Enhances, arguments))
+		CONSTRUCT_FS("pre-depends", DependencyFS(BRT::PreDepends, arguments))
+		CONSTRUCT_FS("depends", DependencyFS(BRT::Depends, arguments))
+		CONSTRUCT_FS("recommends", DependencyFS(BRT::Recommends, arguments))
+		CONSTRUCT_FS("suggests", DependencyFS(BRT::Suggests, arguments))
+		CONSTRUCT_FS("conflicts", DependencyFS(BRT::Conflicts, arguments))
+		CONSTRUCT_FS("breaks", DependencyFS(BRT::Breaks, arguments))
+		CONSTRUCT_FS("enhances", DependencyFS(BRT::Enhances, arguments))
 		CONSTRUCT_FS("provides", ProvidesFS(arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
