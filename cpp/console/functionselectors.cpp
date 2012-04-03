@@ -935,6 +935,16 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "y:rp", "replaces" },
 			{ "y:p", "provides" },
 
+			{ "y:r-pd", "reverse-pre-depends" },
+			{ "y:r-d", "reverse-depends" },
+			{ "y:r-r", "reverse-recommends" },
+			{ "y:r-s", "reverse-suggests" },
+			{ "y:r-e", "reverse-enhances" },
+			{ "y:r-c", "reverse-conflicts" },
+			{ "y:r-b", "reverse-breaks" },
+			{ "y:r-rp", "reverse-replaces" },
+			{ "y:r-p", "reverse-provides" },
+
 			{ "r:a", "release:archive" },
 			{ "r:n", "release:codename" },
 			{ "r:c", "release:component" },
