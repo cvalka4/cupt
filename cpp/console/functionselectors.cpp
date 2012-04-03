@@ -471,35 +471,64 @@ class PackageNameFS: public CommonFS
 	}
 };
 
-class RegexMatchFS: public PredicateFS
+class RegexMatchBaseFS: public PredicateFS
+{
+ protected:
+	RegexMatcher _matcher;
+ public:
+	RegexMatchBaseFS(const Arguments& arguments)
+		: _matcher(arguments)
+	{}
+};
+
+class RegexMatchFS: public RegexMatchBaseFS
 {
 	std::function< string (const Cache&, const SPCV&) > __get_attribute;
-	RegexMatcher __regex_matcher;
  public:
 	RegexMatchFS(decltype(__get_attribute) getAttribute, const Arguments& arguments)
-		: __get_attribute(getAttribute), __regex_matcher(arguments)
+		: RegexMatchBaseFS(arguments), __get_attribute(getAttribute)
 	{}
  protected:
 	bool _match(const Cache& cache, const SPCV& version) const
 	{
-		return __regex_matcher.match(__get_attribute(cache, version));
+		return _matcher.match(__get_attribute(cache, version));
 	}
 };
 
-class SourceRegexMatchFS: public PredicateFS
+class SourceRegexMatchFS: public RegexMatchBaseFS
 {
 	std::function< string (const Version::Source&) > __get_source_attribute;
-	RegexMatcher __regex_matcher;
  public:
 	SourceRegexMatchFS(decltype(__get_source_attribute) getter, const Arguments& arguments)
-		: __get_source_attribute(getter), __regex_matcher(arguments)
+		: RegexMatchBaseFS(arguments), __get_source_attribute(getter)
 	{}
  protected:
 	bool _match(const Cache&, const SPCV& version) const
 	{
 		for (const auto& source: version->sources)
 		{
-			if (__regex_matcher.match(__get_source_attribute(source)))
+			if (_matcher.match(__get_source_attribute(source)))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
+class ProvidesFS: public RegexMatchBaseFS
+{
+ public:
+	ProvidesFS(const Arguments& arguments)
+		: RegexMatchBaseFS(arguments)
+	{}
+ protected:
+	bool _match(const Cache&, const SPCV& v) const
+	{
+		auto version = static_pointer_cast< const BinaryVersion >(v);
+		for (const string& virtualPackageName: version->provides)
+		{
+			if (_matcher.match(virtualPackageName))
 			{
 				return true;
 			}
@@ -740,6 +769,8 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("suggests", DependencyFS(BinaryVersion::RelationTypes::Suggests, arguments))
 		CONSTRUCT_FS("conflicts", DependencyFS(BinaryVersion::RelationTypes::Conflicts, arguments))
 		CONSTRUCT_FS("breaks", DependencyFS(BinaryVersion::RelationTypes::Breaks, arguments))
+		CONSTRUCT_FS("enhances", DependencyFS(BinaryVersion::RelationTypes::Enhances, arguments))
+		CONSTRUCT_FS("provides", ProvidesFS(arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
@@ -861,6 +892,7 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "y:c", "conflicts" },
 			{ "y:b", "breaks" },
 			{ "y:rp", "replaces" },
+			{ "y:p", "provides" },
 
 			{ "r:a", "release:archive" },
 			{ "r:n", "release:codename" },
