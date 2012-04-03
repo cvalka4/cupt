@@ -19,10 +19,75 @@
 #include "common.hpp"
 
 #include <cupt/system/state.hpp>
+#include <cupt/cache/binarypackage.hpp>
 
 bool isPackageInstalled(const Cache& cache, const string& packageName)
 {
 	auto&& installedInfo = cache.getSystemState()->getInstalledInfo(packageName);
 	return (installedInfo && installedInfo->status != system::State::InstalledRecord::Status::ConfigFiles);
+}
+
+typedef BinaryVersion::RelationTypes BRT;
+
+ReverseDependsIndexType computeReverseDependsIndex(const Cache& cache,
+		const vector< BRT::Type >& relationTypes)
+{
+	ReverseDependsIndexType reverseDependsIndex;
+	for (const string& packageName: cache.getBinaryPackageNames())
+	{
+		auto package = cache.getBinaryPackage(packageName);
+		auto versions = package->getVersions();
+		for (const auto& version: versions)
+		{
+			for (auto relationGroup: relationTypes)
+			{
+				const RelationLine& relationLine = version->relations[relationGroup];
+				for (const auto& relationExpression: relationLine)
+				{
+					auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
+					for (const auto& satisfyingVersion: satisfyingVersions)
+					{
+						const string& satisfyingPackageName = satisfyingVersion->packageName;
+						reverseDependsIndex[satisfyingPackageName].insert(packageName);
+					}
+				}
+			}
+		}
+	}
+	return reverseDependsIndex;
+}
+
+void foreachReverseDependency(const Cache& cache, const ReverseDependsIndexType& index,
+		const shared_ptr< const BinaryVersion >& version, BRT::Type relationType,
+		const std::function< void (const shared_ptr< const BinaryVersion >&, const RelationExpression&) > callback)
+{
+	auto packageCandidateNamesIt = index.find(version->packageName);
+	if (packageCandidateNamesIt != index.end())
+	{
+		const auto& packageCandidateNames = packageCandidateNamesIt->second;
+		for (const string& packageCandidateName: packageCandidateNames)
+		{
+			auto packageCandidate = cache.getBinaryPackage(packageCandidateName);
+			auto candidateVersions = packageCandidate->getVersions();
+
+			for (const auto& candidateVersion: candidateVersions)
+			{
+				for (const auto& relationExpression: candidateVersion->relations[relationType])
+				{
+					auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
+					for (const auto& satisfyingVersion: satisfyingVersions)
+					{
+						if (*satisfyingVersion == *version)
+						{
+							callback(candidateVersion, relationExpression);
+							goto candidate;
+						}
+					}
+				}
+				candidate:
+				;
+			}
+		}
+	}
 }
 

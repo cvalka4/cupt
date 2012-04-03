@@ -21,8 +21,6 @@ using std::cout;
 using std::endl;
 #include <set>
 using std::set;
-#include <unordered_map>
-using std::unordered_map;
 #include <queue>
 using std::queue;
 #include <stack>
@@ -382,27 +380,7 @@ int showRelations(Context& context, bool reverse)
 	unordered_map< string, set< string > > reverseDependsIndex;
 	if (reverse)
 	{
-		for (const string& packageName: cache->getBinaryPackageNames())
-		{
-			auto package = cache->getBinaryPackage(packageName);
-			auto versions = package->getVersions();
-			for (const auto& version: versions)
-			{
-				FORIT(relationGroupIt, relationGroups)
-				{
-					const RelationLine& relationLine = version->relations[*relationGroupIt];
-					FORIT(relationExpressionIt, relationLine)
-					{
-						auto satisfyingVersions = cache->getSatisfyingVersions(*relationExpressionIt);
-						FORIT(satisfyingVersionIt, satisfyingVersions)
-						{
-							const string& satisfyingPackageName = (*satisfyingVersionIt)->packageName;
-							reverseDependsIndex[satisfyingPackageName].insert(packageName);
-						}
-					}
-				}
-			}
-		}
+		reverseDependsIndex = computeReverseDependsIndex(*cache, relationGroups);
 	}
 
 	bool recurse = config->getBool("apt::cache::recursedepends");
@@ -466,44 +444,19 @@ int showRelations(Context& context, bool reverse)
 			}
 			else
 			{
-				// we have to check all reverse dependencies for this version
-				auto packageCandidateNamesIt = reverseDependsIndex.find(packageName);
-				if (packageCandidateNamesIt != reverseDependsIndex.end())
-				{
-					const set< string >& packageCandidateNames = packageCandidateNamesIt->second;
-					FORIT(packageCandidateNameIt, packageCandidateNames)
-					{
-						auto packageCandidate = cache->getBinaryPackage(*packageCandidateNameIt);
-						auto candidateVersions = packageCandidate->getVersions();
-
-						for (const auto& candidateVersion: candidateVersions)
+				foreachReverseDependency(*cache, reverseDependsIndex, version, *relationGroupIt,
+						[&versions, &caption, &recurse](const shared_ptr< const BinaryVersion >& reverseVersion,
+								const RelationExpression& relationExpression)
 						{
-							FORIT(relationExpressionIt, candidateVersion->relations[*relationGroupIt])
+							cout << "  " << __("Reverse-") << caption << ": "
+									<< reverseVersion->packageName << ' '
+									<< reverseVersion->versionString << ": "
+									<< relationExpression.toString() << endl;
+							if (recurse)
 							{
-								auto satisfyingVersions = cache->getSatisfyingVersions(*relationExpressionIt);
-								for (const auto& satisfyingVersion: satisfyingVersions)
-								{
-									if (*satisfyingVersion == *version)
-									{
-										// positive result
-										cout << "  " << __("Reverse-") << caption << ": "
-												<< candidateVersion->packageName << ' '
-												<< candidateVersion->versionString << ": "
-												<< relationExpressionIt->toString() << endl;
-										if (recurse)
-										{
-											versions.push(candidateVersion);
-										}
-
-										goto candidate;
-									}
-								}
+								versions.push(reverseVersion);
 							}
-							candidate:
-							;
-						}
-					}
-				}
+						});
 			}
 		}
 	}

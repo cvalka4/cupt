@@ -669,6 +669,35 @@ class DependencyFS: public TransformFS
 	}
 };
 
+class ReverseDependencyFS: public TransformFS
+{
+	BRT::Type __relation_type;
+	mutable unordered_map< string, set< string > > __reverse_index;
+ public:
+	ReverseDependencyFS(BRT::Type relationType, const Arguments& arguments)
+		: TransformFS(true, arguments), __relation_type(relationType)
+	{}
+ protected:
+	FSResult _transform(const Cache& cache, const SPCV& version) const
+	{
+		if (__reverse_index.empty())
+		{
+			__reverse_index = computeReverseDependsIndex(cache, { __relation_type });
+		}
+
+		FSResult result;
+
+		auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
+		foreachReverseDependency(cache, __reverse_index, binaryVersion, __relation_type,
+				[&cache, &result](const shared_ptr< const BinaryVersion >& reverseVersion, const RelationExpression&)
+				{
+					__merge_fsresults(cache, result, { reverseVersion });
+				});
+
+		return result;
+	}
+};
+
 class PackageIsInstalledFS: public PredicateFS
 {
  protected:
@@ -764,6 +793,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("version:description", RegexMatchFS(attr::description, arguments))
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
+		// relations
 		CONSTRUCT_FS("pre-depends", DependencyFS(BRT::PreDepends, arguments))
 		CONSTRUCT_FS("depends", DependencyFS(BRT::Depends, arguments))
 		CONSTRUCT_FS("recommends", DependencyFS(BRT::Recommends, arguments))
@@ -771,6 +801,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("conflicts", DependencyFS(BRT::Conflicts, arguments))
 		CONSTRUCT_FS("breaks", DependencyFS(BRT::Breaks, arguments))
 		CONSTRUCT_FS("enhances", DependencyFS(BRT::Enhances, arguments))
+		CONSTRUCT_FS("reverse-depends", ReverseDependencyFS(BRT::Depends, arguments))
 		CONSTRUCT_FS("provides", ProvidesFS(arguments))
 	}
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);

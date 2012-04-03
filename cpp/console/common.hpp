@@ -19,16 +19,28 @@
 #ifndef COMMON_SEEN
 #define COMMON_SEEN
 
+#include <unordered_map>
+using std::unordered_map;
+
 #include <cupt/common.hpp>
 #include <cupt/config.hpp>
 #include <cupt/cache.hpp>
+#include <cupt/cache/binaryversion.hpp>
 
 using namespace cupt;
 using namespace cupt::cache;
 using namespace cupt::system;
 using namespace cupt::download;
 
+typedef unordered_map< string, set< string > > ReverseDependsIndexType;
+
 bool isPackageInstalled(const Cache&, const string& packageName);
+
+ReverseDependsIndexType computeReverseDependsIndex(
+		const Cache&, const vector< BinaryVersion::RelationTypes::Type >& relationTypes);
+void foreachReverseDependency(const Cache&, const ReverseDependsIndexType&,
+		const shared_ptr< const BinaryVersion >& version, BinaryVersion::RelationTypes::Type relationType,
+		const std::function< void (const shared_ptr< const BinaryVersion >&, const RelationExpression&) > callback);
 
 #endif
 
