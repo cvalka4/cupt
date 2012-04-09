@@ -456,7 +456,7 @@ void CacheImpl::processIndexEntry(const IndexEntry& indexEntry,
 
 	string indexAlias = indexEntry.uri + ' ' + indexEntry.distribution + ' ' +
 			indexEntry.component + ' ' +
-			((indexEntry.category == IndexEntry::Binary) ? "(binary)" : "source");
+			((indexEntry.category == IndexEntry::Binary) ? "(binary)" : "(source)");
 
 	shared_ptr< ReleaseInfo > releaseInfo;
 	try
@@ -488,26 +488,36 @@ void CacheImpl::processIndexEntry(const IndexEntry& indexEntry,
 
 	if (releaseInfo && Version::parseInfoOnly) // description is info-only field
 	{
-		auto localizationRecords = cachefiles::getDownloadInfoOfLocalizedDescriptions3(*config, indexEntry);
-		for (const auto& record: localizationRecords)
-		{
-			auto localizationAlias = format2(__("'%s' descriptions localization for '%s'"), record.language, indexAlias);
-			try
-			{
-				if (fs::fileExists(record.localPath))
-				{
-					processTranslationFile(record.localPath, localizationAlias);
-				}
-			}
-			catch (Exception&)
-			{
-				warn2(__("skipped the index '%s'"), localizationAlias);
-			}
-		}
+		processTranslationFiles(indexEntry, indexAlias);
 	}
 }
 
+void CacheImpl::processTranslationFiles(const IndexEntry& indexEntry,
+		const string& indexAlias)
+{
+	auto process = [this](const string& path, const string& localizationAlias)
+	{
+		try
+		{
+			if (fs::fileExists(path))
+			{
+				processTranslationFile(path, localizationAlias);
+			}
+		}
+		catch (Exception&)
+		{
+			warn2(__("skipped the index '%s'"), localizationAlias);
+		}
+	};
 
+	auto localizationRecords = cachefiles::getPathsOfLocalizedDescriptions(*config, indexEntry);
+	for (const auto& record: localizationRecords)
+	{
+		auto description = format2(__("'%s' descriptions localization"), record.first);
+		auto localizationAlias = format2(__("%s for '%s'"), description, indexAlias);
+		process(record.second, localizationAlias);
+	}
+}
 
 void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 		shared_ptr< const ReleaseInfo > releaseInfo, const string& alias)
@@ -544,9 +554,9 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 			};
 
 			getNextLine();
-			if (file->eof())
+			if (size == 0)
 			{
-				break;
+				break; // eof
 			}
 
 			static const size_t packageAnchorLength = sizeof("Package: ") - 1;
@@ -592,15 +602,16 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 void CacheImpl::processTranslationFile(const string& path, const string& alias)
 {
 	string errorString;
-	shared_ptr< File > file(new File(path, "r", errorString));
+	translationFileStorage.emplace_back(path, "r", errorString);
 	if (!errorString.empty())
 	{
 		fatal2(__("unable to open the file '%s': %s"), path, errorString);
 	}
 
+	File* file = &translationFileStorage.back();
 	try
 	{
-		TagParser parser(&*file);
+		TagParser parser(file);
 		TagParser::StringRange tagName, tagValue;
 
 		static const char descriptionSubPattern[] = "Description-";
@@ -612,8 +623,14 @@ void CacheImpl::processTranslationFile(const string& path, const string& alias)
 		TranslationPosition translationPosition;
 		translationPosition.file = file;
 
-		while ((recordPosition = file->tell()), (parser.parseNextLine(tagName, tagValue) && !file->eof()))
+		while (true)
 		{
+			recordPosition = file->tell();
+			if (!parser.parseNextLine(tagName, tagValue))
+			{
+				if (file->eof()) break; else continue;
+			}
+
 			bool hashSumFound = false;
 			bool translationFound = false;
 

@@ -53,7 +53,7 @@ class CacheImpl
 	typedef Cache::ExtendedInfo ExtendedInfo;
 	struct TranslationPosition
 	{
-		shared_ptr< File > file;
+		File* file;
 		size_t offset;
 	};
 
@@ -65,6 +65,7 @@ class CacheImpl
 	shared_ptr< PinInfo > pinInfo;
 	mutable map< shared_ptr< const Version >, ssize_t > pinCache;
 	map< string, shared_ptr< ReleaseInfo > > releaseInfoCache;
+	list< File > translationFileStorage;
 	smatch* __smatch_ptr;
 
 	shared_ptr< Package > newSourcePackage(const string&) const;
@@ -77,6 +78,7 @@ class CacheImpl
 	void processIndexEntry(const IndexEntry&, const ReleaseLimits&);
 	void processIndexFile(const string& path, IndexEntry::Type category,
 			shared_ptr< const ReleaseInfo >, const string&);
+	void processTranslationFiles(const IndexEntry&, const string&);
 	void processTranslationFile(const string& path, const string&);
 	vector< shared_ptr< const BinaryVersion > > getSatisfyingVersions(const Relation&) const;
  public:

@@ -203,7 +203,7 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 		{
 			if (recordIt->hashSums.empty())
 			{
-				fatal2(__("no hash sums defined for the index uri '%s'"), recordIt->uri);
+				fatal2(__("no hash sums defined for the index URI '%s'"), recordIt->uri);
 			}
 		}
 	}
@@ -281,15 +281,28 @@ static vector< vector< string > > getChunksOfLocalizedDescriptions(
 	return result;
 }
 
-vector< string > getPathsOfLocalizedDescriptions(const Config& config, const IndexEntry& entry)
+static string extractLocalizationLanguage(const string& lastChunk)
+{
+	string result = lastChunk;
+	auto dashPosition = result.find('-');
+	if (dashPosition != string::npos)
+	{
+		result.erase(0, dashPosition + 1);
+	}
+	return result;
+}
+
+vector< pair< string, string > > getPathsOfLocalizedDescriptions(
+		const Config& config, const IndexEntry& entry)
 {
 	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
 	auto basePath = getPathOfIndexEntry(config, entry);
 
-	vector< string > result;
-	FORIT(chunkArrayIt, chunkArrays)
+	vector< pair< string, string > > result;
+	for (const auto& chunkArray: chunkArrays)
 	{
-		result.push_back(basePath + "_" + join("_", *chunkArrayIt));
+		auto path = basePath + "_" + join("_", chunkArray);
+		result.push_back({ extractLocalizationLanguage(chunkArray.back()), std::move(path) });
 	}
 
 	return result;
@@ -359,13 +372,7 @@ vector< LocalizationDownloadRecord3 > getDownloadInfoOfLocalizedDescriptions3(
 			continue;
 		}
 		record.localPath = basePath + "_" + join("_", chunkArray);
-
-		record.language = chunkArray.back();
-		auto slashPosition = record.language.find('-');
-		if (slashPosition != string::npos)
-		{
-			record.language.erase(0, slashPosition + 1);
-		}
+		record.language = extractLocalizationLanguage(chunkArray.back());
 
 		result.push_back(std::move(record));
 	}
