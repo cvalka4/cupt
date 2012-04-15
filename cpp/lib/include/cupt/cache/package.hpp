@@ -61,9 +61,6 @@ class CUPT_API Package
 	 * @param versionString version string
 	 */
 	const Version* getSpecificVersion(const string& versionString) const;
-
-	/// memoize parsed versions
-	static bool memoize;
 };
 
 }

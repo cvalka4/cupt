@@ -26,8 +26,6 @@
 namespace cupt {
 namespace cache {
 
-bool Package::memoize = false;
-
 Package::Package(const shared_ptr< const string >& binaryArchitecture)
 	: __parsed_versions(NULL), _binary_architecture(binaryArchitecture)
 {}
@@ -37,12 +35,13 @@ void Package::addEntry(const Version::InitializationParameters& initParams)
 	__unparsed_versions.push_back(initParams);
 }
 
-vector< shared_ptr< Version > > Package::_get_versions() const
+vector< Version* > Package::_get_versions() const
 {
 	if (! __parsed_versions)
 	{
-		// versions were either not parsed or parsed, but not saved
-		vector< shared_ptr< Version > > result;
+		// versions were not parsed yet
+		__parsed_versions = new vector< Version* >();
+		vector< Version* > result;
 
 		vector< Version::InitializationParameters > newUnparsedVersions;
 		FORIT(unparsedVersionIt, __unparsed_versions)
@@ -50,7 +49,7 @@ vector< shared_ptr< Version > > Package::_get_versions() const
 			Version::InitializationParameters& initParams = *unparsedVersionIt;
 			try
 			{
-				__merge_version(_parse_version(initParams), result);
+				__merge_version(_parse_version(initParams), *__parsed_versions);
 				if (!memoize)
 				{
 					newUnparsedVersions.push_back(initParams);
@@ -67,21 +66,9 @@ vector< shared_ptr< Version > > Package::_get_versions() const
 		}
 		__unparsed_versions.swap(newUnparsedVersions);
 
-		if (memoize)
-		{
-			__parsed_versions = new vector< shared_ptr< Version > >();
 			__parsed_versions->swap(result);
-			return *__parsed_versions;
-		}
-		else
-		{
-			return result;
-		}
 	}
-	else
-	{
-		return *__parsed_versions;
-	}
+	return *__parsed_versions;
 }
 
 vector< shared_ptr< const Version > > Package::getVersions() const
