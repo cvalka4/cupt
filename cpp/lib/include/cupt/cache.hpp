@@ -154,17 +154,13 @@ class CUPT_API Cache
 	/// contains version and a corresponding pin value
 	struct PinnedVersion
 	{
-		shared_ptr< const Version > version; ///< version
+		const Version* version; ///< version
 		ssize_t pin; ///< pin value
-
-		/// trivial constructor
-		PinnedVersion(shared_ptr< const Version > _version, ssize_t _pin)
-			: version(_version), pin(_pin) {}
 	};
 	/// gets list of versions with pins of certain package
-	vector< PinnedVersion > getSortedPinnedVersions(const shared_ptr< const Package >&) const;
+	vector< PinnedVersion > getSortedPinnedVersions(const Package*) const;
 	/// gets version of highest pin from the package
-	shared_ptr< const Version > getPolicyVersion(const shared_ptr< const Package >&) const;
+	shared_ptr< const Version > getPolicyVersion(const Package*) const;
 
 	/// gets list of binary versions which satisfy given relation expression
 	vector< shared_ptr< const BinaryVersion > > getSatisfyingVersions(const RelationExpression&) const;
@@ -177,7 +173,7 @@ class CUPT_API Cache
 	 * @return first pair element - short description, long pair element - long description;
 	 * if localized descriptions are not available, short description will be empty
 	 */
-	pair< string, string > getLocalizedDescriptions(const shared_ptr< const BinaryVersion >&) const;
+	pair< string, string > getLocalizedDescriptions(const BinaryVersion*) const;
 
 	/// @copydoc getPathOfReleaseList
 	static bool verifySignature(const shared_ptr< const Config >&, const string& path);
@@ -186,13 +182,13 @@ class CUPT_API Cache
 	 * You must not assume that the file actually exists even if installed
 	 * version is passed as parameter.
 	 */
-	static string getPathOfCopyright(const shared_ptr< const BinaryVersion >&);
+	static string getPathOfCopyright(const BinaryVersion*);
 	/// gets a supposed system path of package changelog file for certain binary version
 	/**
 	 * You must not assume that the file actually exists even if installed
 	 * version is passed as parameter.
 	 */
-	static string getPathOfChangelog(const shared_ptr< const BinaryVersion >&);
+	static string getPathOfChangelog(const BinaryVersion*);
 
 	/// controls internal caching
 	/**
