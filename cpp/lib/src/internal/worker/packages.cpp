@@ -123,7 +123,7 @@ PackagesWorker::PackagesWorker()
 set< string > __get_pseudo_essential_package_names(const Cache& cache, bool debugging)
 {
 	set< string > result;
-	queue< shared_ptr< const BinaryVersion > > toProcess;
+	queue< const BinaryVersion* > toProcess;
 
 	auto processRelationExpression = [&cache, &result, &toProcess, &debugging](const RelationExpression& relationExpression)
 	{
@@ -258,7 +258,7 @@ void PackagesWorker::__fill_actions(GraphAndAttributes& gaa)
 			{
 				const IA::Type& innerActionType = *innerActionTypeIt;
 
-				shared_ptr< const BinaryVersion > version;
+				const BinaryVersion* version;
 				if (innerActionType == IA::Remove)
 				{
 					auto package = _cache->getBinaryPackage(packageName);
@@ -273,11 +273,12 @@ void PackagesWorker::__fill_actions(GraphAndAttributes& gaa)
 				}
 				if (!version)
 				{
+					// FIXME: memory leak
 					auto versionPtr = new BinaryVersion;
 					versionPtr->packageName = packageName;
 					versionPtr->versionString = "<dummy>";
 					versionPtr->essential = false;
-					version.reset(versionPtr);
+					version = versionPtr;
 				}
 
 				if (innerActionType != IA::Unpack)
@@ -496,8 +497,8 @@ const shared_ptr< const BinaryVersion > __create_virtual_version(
 }
 
 void __create_virtual_edge(
-		const shared_ptr< const BinaryVersion >& fromVirtualVersion,
-		const shared_ptr< const BinaryVersion >& toVirtualVersion,
+		const BinaryVersion* fromVirtualVersion,
+		const BinaryVersion* toVirtualVersion,
 		vector< pair< InnerAction, InnerAction > >* virtualEdgesPtr)
 {
 	InnerAction from;

@@ -36,7 +36,7 @@ using std::multimap;
 struct InnerAction
 {
 	enum Type { Remove, Unpack, Configure } type;
-	shared_ptr< const BinaryVersion > version;
+	const BinaryVersion* version;
 	bool fake;
 	mutable int16_t priority;
 	mutable const InnerAction* linkedFrom;
