@@ -39,7 +39,7 @@ namespace dependencygraph {
 
 struct InitialPackageEntry
 {
-	shared_ptr< const BinaryVersion > version;
+	const BinaryVersion* version;
 	bool sticked;
 	bool modified;
 
@@ -74,7 +74,7 @@ struct VersionVertex: public BasicVertex
  private:
 	const map< string, forward_list< const Element* > >::iterator __related_element_ptrs_it;
  public:
-	shared_ptr< const BinaryVersion > version;
+	const BinaryVersion* version;
 
 	VersionVertex(const map< string, forward_list< const Element* > >::iterator&);
 	string toString() const;

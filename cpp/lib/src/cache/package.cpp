@@ -41,9 +41,7 @@ vector< Version* > Package::_get_versions() const
 	{
 		// versions were not parsed yet
 		__parsed_versions = new vector< Version* >();
-		vector< Version* > result;
 
-		vector< Version::InitializationParameters > newUnparsedVersions;
 		FORIT(unparsedVersionIt, __unparsed_versions)
 		{
 			Version::InitializationParameters& initParams = *unparsedVersionIt;
@@ -60,26 +58,24 @@ vector< Version* > Package::_get_versions() const
 				warn2(__("error while parsing a version for the package '%s'"), initParams.packageName);
 			}
 		}
-		if (result.empty())
+		if (__parsed_versions->empty())
 		{
 			warn2(__("no valid versions available, discarding the package"));
 		}
-		__unparsed_versions.swap(newUnparsedVersions);
-
-			__parsed_versions->swap(result);
+		__unparsed_versions.clear();
 	}
 	return *__parsed_versions;
 }
 
-vector< shared_ptr< const Version > > Package::getVersions() const
+vector< const Version* > Package::getVersions() const
 {
 	auto source = _get_versions();
-	vector< shared_ptr< const Version > > result;
+	vector< const Version* > result;
 	std::copy(source.begin(), source.end(), std::back_inserter(result));
 	return result;
 }
 
-void Package::__merge_version(shared_ptr< Version >&& parsedVersion, vector< shared_ptr< Version > >& result) const
+void Package::__merge_version(Version* parsedVersion, vector< Version* >& result) const
 {
 	if (!_is_architecture_appropriate(parsedVersion))
 	{
@@ -90,7 +86,7 @@ void Package::__merge_version(shared_ptr< Version >&& parsedVersion, vector< sha
 	try
 	{
 		const auto& parsedVersionString = parsedVersion->versionString;
-		auto foundItem = std::find_if(result.begin(), result.end(), [&parsedVersionString](shared_ptr< const Version > elem) -> bool
+		auto foundItem = std::find_if(result.begin(), result.end(), [&parsedVersionString](const Version* elem) -> bool
 		{
 			return (elem->versionString == parsedVersionString);
 		});
@@ -98,14 +94,14 @@ void Package::__merge_version(shared_ptr< Version >&& parsedVersion, vector< sha
 		if (foundItem == result.end())
 		{
 			// no such version before, just add it
-			result.push_back(std::move(parsedVersion));
+			result.push_back(parsedVersion);
 		}
 		else
 		{
 			// there is such version string
 			const auto& foundVersion = *foundItem;
 
-			auto binaryVersion = dynamic_pointer_cast< BinaryVersion >(foundVersion);
+			auto binaryVersion = dynamic_cast< BinaryVersion >(foundVersion);
 			if ((binaryVersion && binaryVersion->isInstalled()) || foundVersion->areHashesEqual(parsedVersion))
 			{
 				/*
@@ -122,8 +118,8 @@ void Package::__merge_version(shared_ptr< Version >&& parsedVersion, vector< sha
 
 				if (binaryVersion && binaryVersion->isInstalled())
 				{
-					shared_ptr< BinaryVersion > binaryParsedVersion =
-							dynamic_pointer_cast< BinaryVersion >(parsedVersion);
+					BinaryVersion* binaryParsedVersion =
+							dynamic_cast< BinaryVersion >(parsedVersion);
 					binaryVersion->file.hashSums = binaryParsedVersion->file.hashSums;
 				}
 			}
@@ -149,7 +145,7 @@ void Package::__merge_version(shared_ptr< Version >&& parsedVersion, vector< sha
 	};
 }
 
-shared_ptr< const Version > Package::getSpecificVersion(const string& versionString) const
+const Version* Package::getSpecificVersion(const string& versionString) const
 {
 	auto source = _get_versions();
 	FORIT(versionIt, source)
@@ -159,7 +155,7 @@ shared_ptr< const Version > Package::getSpecificVersion(const string& versionStr
 			return *versionIt;
 		}
 	}
-	return shared_ptr< const Version >();
+	return nullptr;
 }
 
 Package::~Package()
