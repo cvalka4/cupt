@@ -111,10 +111,10 @@ shared_ptr< Package > CacheImpl::preparePackage(unordered_map< string, vector< P
 	}
 }
 
-vector< shared_ptr< const BinaryVersion > >
+vector< const BinaryVersion* >
 CacheImpl::getSatisfyingVersions(const Relation& relation) const
 {
-	vector< shared_ptr< const BinaryVersion > > result;
+	vector< const BinaryVersion* > result;
 
 	const string& packageName = relation.packageName;
 
@@ -780,7 +780,7 @@ void CacheImpl::parseExtendedStates()
 	}
 }
 
-vector< shared_ptr< const BinaryVersion > >
+vector< const BinaryVersion* >
 CacheImpl::getSatisfyingVersions(const RelationExpression& relationExpression) const
 {
 	string memoizeKey;
@@ -806,7 +806,7 @@ CacheImpl::getSatisfyingVersions(const RelationExpression& relationExpression) c
 		auto source = getSatisfyingVersions(*relationIt);
 		FORIT(versionIt, source)
 		{
-			auto predicate = std::bind2nd(PointerEqual< const BinaryVersion >(), *versionIt);
+			auto predicate = [versionIt](const BinaryVersion* v) { return *v == **versionIt; };
 			if (std::find_if(result.begin(), result.end(), predicate) == result.end())
 			{
 				result.push_back(*versionIt);

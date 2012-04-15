@@ -113,7 +113,7 @@ class DependencyGraph: protected Graph< const Element*, PointeredAlreadyTraits >
 	DependencyGraph(const Config& config, const Cache& cache);
 	~DependencyGraph();
 	vector< pair< const Element*, shared_ptr< const PackageEntry > > > fill(
-			const map< string, shared_ptr< const BinaryVersion > >&,
+			const map< string, const BinaryVersion* >&,
 			const map< string, InitialPackageEntry >&);
 
 	const Element* getCorrespondingEmptyElement(const Element*);

@@ -61,7 +61,7 @@ class CacheImpl
 	mutable unordered_map< string, shared_ptr< Package > > binaryPackages;
 	mutable unordered_map< string, shared_ptr< Package > > sourcePackages;
 	map< string, TranslationPosition > translations;
-	mutable unordered_map< string, vector< shared_ptr< const BinaryVersion > > > getSatisfyingVersionsCache;
+	mutable unordered_map< string, vector< const BinaryVersion* > > getSatisfyingVersionsCache;
 	shared_ptr< PinInfo > pinInfo;
 	mutable map< shared_ptr< const Version >, ssize_t > pinCache;
 	map< string, shared_ptr< ReleaseInfo > > releaseInfoCache;
@@ -80,7 +80,7 @@ class CacheImpl
 			shared_ptr< const ReleaseInfo >, const string&);
 	void processTranslationFiles(const IndexEntry&, const string&);
 	void processTranslationFile(const string& path, const string&);
-	vector< shared_ptr< const BinaryVersion > > getSatisfyingVersions(const Relation&) const;
+	vector< const BinaryVersion* > getSatisfyingVersions(const Relation&) const;
  public:
 	shared_ptr< const Config > config;
 	shared_ptr< const string > binaryArchitecture;
@@ -106,7 +106,7 @@ class CacheImpl
 	ssize_t getPin(const shared_ptr< const Version >&, const std::function< string () >&) const;
 	pair< string, string > getLocalizedDescriptions(const shared_ptr< const BinaryVersion >&) const;
 	void processProvides(const string*, const char*, const char*);
-	vector< shared_ptr< const BinaryVersion > > getSatisfyingVersions(const RelationExpression&) const;
+	vector< const BinaryVersion* > getSatisfyingVersions(const RelationExpression&) const;
 };
 
 }
