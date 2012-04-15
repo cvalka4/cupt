@@ -108,7 +108,7 @@ class CUPT_API Cache
 	 * @param packageName name of the binary package
 	 * @return pointer to binary package if found, empty pointer if not
 	 */
-	shared_ptr< const BinaryPackage > getBinaryPackage(const string& packageName) const;
+	const BinaryPackage* getBinaryPackage(const string& packageName) const;
 	/// gets the list of names of available source packages
 	vector< string > getSourcePackageNames() const;
 	/// gets SourcePackage by name
@@ -116,10 +116,10 @@ class CUPT_API Cache
 	 * @param packageName name of the source package
 	 * @return pointer to source package if found, empty pointer if not
 	 */
-	shared_ptr< const SourcePackage > getSourcePackage(const string& packageName) const;
+	const SourcePackage* getSourcePackage(const string& packageName) const;
 
 	/// gets all installed versions
-	vector< shared_ptr< const BinaryVersion > > getInstalledVersions() const;
+	vector< const BinaryVersion* > getInstalledVersions() const;
 
 	/// is binary package automatically installed?
 	/**
@@ -149,7 +149,7 @@ class CUPT_API Cache
 	shared_ptr< const system::State > getSystemState() const;
 
 	/// gets pin value for a version
-	ssize_t getPin(const shared_ptr< const Version >&) const;
+	ssize_t getPin(const Version*) const;
 
 	/// contains version and a corresponding pin value
 	struct PinnedVersion
