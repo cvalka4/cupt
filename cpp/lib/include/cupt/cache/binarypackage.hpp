@@ -33,7 +33,7 @@ class CUPT_API BinaryPackage: public Package
  protected:
 	/// @cond
 	CUPT_LOCAL virtual shared_ptr< Version > _parse_version(const Version::InitializationParameters& initParams) const;
-	CUPT_LOCAL virtual bool _is_architecture_appropriate(const shared_ptr< const Version >&) const;
+	CUPT_LOCAL virtual bool _is_architecture_appropriate(const Version*) const;
 	/// @endcond
  public:
 	/// constructor
@@ -44,12 +44,12 @@ class CUPT_API BinaryPackage: public Package
 	 */
 	BinaryPackage(const shared_ptr< const string >& binaryArchitecture, bool allowReinstall);
 	/// gets list of versions
-	vector< shared_ptr< const BinaryVersion > > getVersions() const;
+	vector< const BinaryVersion* > getVersions() const;
 	/// gets installed version
 	/**
 	 * @return installed version if exists, empty pointer if not
 	 */
-	shared_ptr< const BinaryVersion > getInstalledVersion() const;
+	const BinaryVersion* getInstalledVersion() const;
 };
 
 }

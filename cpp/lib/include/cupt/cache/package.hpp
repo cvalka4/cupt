@@ -31,7 +31,7 @@ class CUPT_API Package
 	mutable vector< Version::InitializationParameters > __unparsed_versions;
 	mutable vector< shared_ptr< Version > >* __parsed_versions;
 
-	CUPT_LOCAL void __merge_version(shared_ptr< Version >&&, vector< shared_ptr< Version > >& result) const;
+	CUPT_LOCAL void __merge_version(Version*, vector< Version* >& result) const;
 
 	Package(const Package&);
 	Package& operator=(const Package&);
@@ -41,7 +41,7 @@ class CUPT_API Package
 
 	CUPT_LOCAL vector< shared_ptr< Version > > _get_versions() const;
 	CUPT_LOCAL virtual shared_ptr< Version > _parse_version(const Version::InitializationParameters&) const = 0;
-	CUPT_LOCAL virtual bool _is_architecture_appropriate(const shared_ptr< const Version >&) const = 0;
+	CUPT_LOCAL virtual bool _is_architecture_appropriate(const Version*) const = 0;
 	/// @endcond
  public:
 	/// constructor
@@ -54,13 +54,13 @@ class CUPT_API Package
 	/// adds new element (version initialization parameters) to the container
 	void addEntry(const Version::InitializationParameters&);
 	/// gets list of versions
-	vector< shared_ptr< const Version > > getVersions() const;
+	vector< const Version* > getVersions() const;
 	/// gets version with a certain Version::versionString
 	/**
 	 * @return version if found, empty pointer if not found
 	 * @param versionString version string
 	 */
-	shared_ptr< const Version > getSpecificVersion(const string& versionString) const;
+	const Version* getSpecificVersion(const string& versionString) const;
 
 	/// memoize parsed versions
 	static bool memoize;
