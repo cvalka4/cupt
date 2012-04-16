@@ -48,10 +48,6 @@ vector< Version* > Package::_get_versions() const
 			try
 			{
 				__merge_version(_parse_version(initParams), *__parsed_versions);
-				if (!memoize)
-				{
-					newUnparsedVersions.push_back(initParams);
-				}
 			}
 			catch (Exception& e)
 			{
@@ -101,7 +97,7 @@ void Package::__merge_version(Version* parsedVersion, vector< Version* >& result
 			// there is such version string
 			const auto& foundVersion = *foundItem;
 
-			auto binaryVersion = dynamic_cast< BinaryVersion >(foundVersion);
+			auto binaryVersion = dynamic_cast< BinaryVersion* >(foundVersion);
 			if ((binaryVersion && binaryVersion->isInstalled()) || foundVersion->areHashesEqual(parsedVersion))
 			{
 				/*
@@ -119,7 +115,7 @@ void Package::__merge_version(Version* parsedVersion, vector< Version* >& result
 				if (binaryVersion && binaryVersion->isInstalled())
 				{
 					BinaryVersion* binaryParsedVersion =
-							dynamic_cast< BinaryVersion >(parsedVersion);
+							dynamic_cast< BinaryVersion* >(parsedVersion);
 					binaryVersion->file.hashSums = binaryParsedVersion->file.hashSums;
 				}
 			}

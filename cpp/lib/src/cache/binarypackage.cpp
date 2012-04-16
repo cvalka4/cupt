@@ -26,7 +26,7 @@ BinaryPackage::BinaryPackage(const shared_ptr< const string >& binaryArchitectur
 	: Package(binaryArchitecture), __allow_reinstall(allowReinstall)
 {}
 
-shared_ptr< Version > BinaryPackage::_parse_version(const Version::InitializationParameters& initParams) const
+Version* BinaryPackage::_parse_version(const Version::InitializationParameters& initParams) const
 {
 	auto version = BinaryVersion::parseFromFile(initParams);
 	if (__allow_reinstall && version->isInstalled())
@@ -36,9 +36,9 @@ shared_ptr< Version > BinaryPackage::_parse_version(const Version::Initializatio
 	return version;
 }
 
-bool BinaryPackage::_is_architecture_appropriate(const shared_ptr< const Version >& version) const
+bool BinaryPackage::_is_architecture_appropriate(const Version* version) const
 {
-	auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
+	auto binaryVersion = static_cast< const BinaryVersion* >(version);
 	if (binaryVersion->isInstalled())
 	{
 		return true;
@@ -47,18 +47,18 @@ bool BinaryPackage::_is_architecture_appropriate(const shared_ptr< const Version
 	return (architecture == "all" || architecture == *_binary_architecture);
 }
 
-vector< shared_ptr< const BinaryVersion > > BinaryPackage::getVersions() const
+vector< const BinaryVersion* > BinaryPackage::getVersions() const
 {
 	auto source = _get_versions();
-	vector< shared_ptr< const BinaryVersion > > result;
+	vector< const BinaryVersion* > result;
 	FORIT(it, source)
 	{
-		result.push_back(static_pointer_cast< const BinaryVersion >(*it));
+		result.push_back(static_cast< const BinaryVersion* >(*it));
 	}
 	return result;
 }
 
-shared_ptr< const BinaryVersion > BinaryPackage::getInstalledVersion() const
+const BinaryVersion* BinaryPackage::getInstalledVersion() const
 {
 	auto source = getVersions();
 	if (!source.empty() && source[0]->isInstalled())
@@ -68,7 +68,7 @@ shared_ptr< const BinaryVersion > BinaryPackage::getInstalledVersion() const
 	}
 	else
 	{
-		return shared_ptr< const BinaryVersion >();
+		return nullptr;
 	}
 }
 

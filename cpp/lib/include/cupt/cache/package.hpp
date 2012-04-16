@@ -29,7 +29,7 @@ namespace cache {
 class CUPT_API Package
 {
 	mutable vector< Version::InitializationParameters > __unparsed_versions;
-	mutable vector< shared_ptr< Version > >* __parsed_versions;
+	mutable vector< Version* >* __parsed_versions;
 
 	CUPT_LOCAL void __merge_version(Version*, vector< Version* >& result) const;
 
@@ -39,8 +39,8 @@ class CUPT_API Package
 	/// @cond
 	shared_ptr< const string > _binary_architecture;
 
-	CUPT_LOCAL vector< shared_ptr< Version > > _get_versions() const;
-	CUPT_LOCAL virtual shared_ptr< Version > _parse_version(const Version::InitializationParameters&) const = 0;
+	CUPT_LOCAL vector< Version* > _get_versions() const;
+	CUPT_LOCAL virtual Version* _parse_version(const Version::InitializationParameters&) const = 0;
 	CUPT_LOCAL virtual bool _is_architecture_appropriate(const Version*) const = 0;
 	/// @endcond
  public:

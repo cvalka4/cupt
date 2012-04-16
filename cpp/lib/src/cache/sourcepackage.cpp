@@ -28,14 +28,14 @@ SourcePackage::SourcePackage(const shared_ptr< const string >& binaryArchitectur
 	: Package(binaryArchitecture)
 {}
 
-shared_ptr< Version > SourcePackage::_parse_version(const Version::InitializationParameters& initParams) const
+Version* SourcePackage::_parse_version(const Version::InitializationParameters& initParams) const
 {
 	return SourceVersion::parseFromFile(initParams);
 }
 
-bool SourcePackage::_is_architecture_appropriate(const shared_ptr< const Version >& version) const
+bool SourcePackage::_is_architecture_appropriate(const Version* version) const
 {
-	const vector< string >& architectures = static_pointer_cast< const SourceVersion >(version)->architectures;
+	const vector< string >& architectures = static_cast< const SourceVersion* >(version)->architectures;
 	FORIT(architectureIt, architectures)
 	{
 		if(*architectureIt == "all" || internal::architectureMatch(*_binary_architecture, *architectureIt))
@@ -46,13 +46,13 @@ bool SourcePackage::_is_architecture_appropriate(const shared_ptr< const Version
 	return false;
 }
 
-vector< shared_ptr< const SourceVersion > > SourcePackage::getVersions() const
+vector< const SourceVersion* > SourcePackage::getVersions() const
 {
 	auto source = _get_versions();
-	vector< shared_ptr< const SourceVersion > > result;
+	vector< const SourceVersion* > result;
 	FORIT(it, source)
 	{
-		result.push_back(static_pointer_cast< const SourceVersion >(*it));
+		result.push_back(static_cast< const SourceVersion* >(*it));
 	}
 	return result;
 }

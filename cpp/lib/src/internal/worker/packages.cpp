@@ -482,12 +482,12 @@ void __fill_graph_dependencies(const shared_ptr< const Cache >& cache,
 	}
 }
 
-const BinaryVersion* __create_virtual_version(
-		const shared_ptr< const BinaryVersion >& version)
+const BinaryVersion* __create_virtual_version(const BinaryVersion* version)
 {
 	typedef BinaryVersion::RelationTypes RT;
 
-	shared_ptr< BinaryVersion > virtualVersion(new BinaryVersion);
+	// FIXME: memory leak
+	auto virtualVersion = new BinaryVersion;
 	virtualVersion->packageName = version->packageName;
 	virtualVersion->versionString = version->versionString;
 	virtualVersion->relations[RT::PreDepends] = version->relations[RT::PreDepends];
@@ -706,7 +706,8 @@ void __expand_linked_actions(const Cache& cache, GraphAndAttributes& gaa, bool d
 			if (relationRecordIt->reverse == neededValueOfReverse)
 			{
 				auto satisfyingVersions = cache.getSatisfyingVersions(relationRecordIt->relationExpression);
-				auto predicate = std::bind2nd(PointerEqual< const BinaryVersion >(), antagonisticPtr->version);
+				auto predicate = std::bind(PointerEqual< const BinaryVersion >(),
+						std::placeholders::_1, antagonisticPtr->version);
 				if (std::find_if(satisfyingVersions.begin(), satisfyingVersions.end(),
 						predicate) == satisfyingVersions.end())
 				{
@@ -1345,7 +1346,7 @@ map< string, pair< download::Manager::DownloadEntity, string > > PackagesWorker:
 			const Resolver::SuggestedPackages& suggestedPackages = __actions_preview->groups[*actionIt];
 			FORIT(it, suggestedPackages)
 			{
-				const shared_ptr< const BinaryVersion >& version = it->second.version;
+				const auto& version = it->second.version;
 
 				const string& packageName = version->packageName;
 				const string& versionString = version->versionString;
@@ -1750,7 +1751,7 @@ string PackagesWorker::__generate_input_for_preinstall_v2_hooks(
 		FORIT(actionIt, *actionGroupIt)
 		{
 			auto actionType = actionIt->type;
-			const shared_ptr< const BinaryVersion >& version = actionIt->version;
+			const auto& version = actionIt->version;
 			string path;
 			switch (actionType)
 			{
@@ -2192,7 +2193,7 @@ void PackagesWorker::changeSystem(const shared_ptr< download::Progress >& downlo
 					string actionExpression;
 					if (actionName == "unpack" || actionName == "install")
 					{
-						const shared_ptr< const BinaryVersion > version = actionIt->version;
+						const auto& version = actionIt->version;
 						actionExpression = archivesDirectory + '/' + _get_archive_basename(version);
 					}
 					else
