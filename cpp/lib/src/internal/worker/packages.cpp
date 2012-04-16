@@ -482,7 +482,7 @@ void __fill_graph_dependencies(const shared_ptr< const Cache >& cache,
 	}
 }
 
-const shared_ptr< const BinaryVersion > __create_virtual_version(
+const BinaryVersion* __create_virtual_version(
 		const shared_ptr< const BinaryVersion >& version)
 {
 	typedef BinaryVersion::RelationTypes RT;
