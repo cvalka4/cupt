@@ -26,14 +26,14 @@ BinaryPackage::BinaryPackage(const shared_ptr< const string >& binaryArchitectur
 	: Package(binaryArchitecture), __allow_reinstall(allowReinstall)
 {}
 
-Version* BinaryPackage::_parse_version(const Version::InitializationParameters& initParams) const
+unique_ptr< Version > BinaryPackage::_parse_version(const Version::InitializationParameters& initParams) const
 {
 	auto version = BinaryVersion::parseFromFile(initParams);
 	if (__allow_reinstall && version->isInstalled())
 	{
 		version->versionString += "~installed";
 	}
-	return version;
+	return unique_ptr< Version >(version);
 }
 
 bool BinaryPackage::_is_architecture_appropriate(const Version* version) const
@@ -49,11 +49,11 @@ bool BinaryPackage::_is_architecture_appropriate(const Version* version) const
 
 vector< const BinaryVersion* > BinaryPackage::getVersions() const
 {
-	auto source = _get_versions();
+	const auto& source = _get_versions();
 	vector< const BinaryVersion* > result;
 	FORIT(it, source)
 	{
-		result.push_back(static_cast< const BinaryVersion* >(*it));
+		result.push_back(static_cast< const BinaryVersion* >(it->get()));
 	}
 	return result;
 }

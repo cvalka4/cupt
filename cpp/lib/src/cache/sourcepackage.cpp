@@ -28,9 +28,9 @@ SourcePackage::SourcePackage(const shared_ptr< const string >& binaryArchitectur
 	: Package(binaryArchitecture)
 {}
 
-Version* SourcePackage::_parse_version(const Version::InitializationParameters& initParams) const
+unique_ptr< Version > SourcePackage::_parse_version(const Version::InitializationParameters& initParams) const
 {
-	return SourceVersion::parseFromFile(initParams);
+	return unique_ptr< Version >(SourceVersion::parseFromFile(initParams));
 }
 
 bool SourcePackage::_is_architecture_appropriate(const Version* version) const
@@ -48,11 +48,11 @@ bool SourcePackage::_is_architecture_appropriate(const Version* version) const
 
 vector< const SourceVersion* > SourcePackage::getVersions() const
 {
-	auto source = _get_versions();
+	const auto& source = _get_versions();
 	vector< const SourceVersion* > result;
 	FORIT(it, source)
 	{
-		result.push_back(static_cast< const SourceVersion* >(*it));
+		result.push_back(static_cast< const SourceVersion* >(it->get()));
 	}
 	return result;
 }
