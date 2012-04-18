@@ -22,7 +22,7 @@
 namespace cupt {
 namespace cache {
 
-BinaryPackage::BinaryPackage(const shared_ptr< const string >& binaryArchitecture, bool allowReinstall)
+BinaryPackage::BinaryPackage(const string* binaryArchitecture, bool allowReinstall)
 	: Package(binaryArchitecture), __allow_reinstall(allowReinstall)
 {}
 

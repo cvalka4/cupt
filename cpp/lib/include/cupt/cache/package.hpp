@@ -36,7 +36,7 @@ class CUPT_API Package
 	Package& operator=(const Package&);
  protected:
 	/// @cond
-	shared_ptr< const string > _binary_architecture;
+	const string* _binary_architecture;
 
 	CUPT_LOCAL const vector< unique_ptr< Version > >& _get_versions() const;
 	CUPT_LOCAL virtual unique_ptr< Version > _parse_version(const Version::InitializationParameters&) const = 0;
@@ -47,7 +47,7 @@ class CUPT_API Package
 	/**
 	 * @param binaryArchitecture binary architecture of the system
 	 */
-	Package(const shared_ptr< const string >& binaryArchitecture);
+	Package(const string*);
 	/// destructor
 	virtual ~Package();
 	/// adds new element (version initialization parameters) to the container

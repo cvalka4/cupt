@@ -84,7 +84,7 @@ class CacheImpl
 	vector< const BinaryVersion* > getSatisfyingVersions(const Relation&) const;
  public:
 	shared_ptr< const Config > config;
-	shared_ptr< const string > binaryArchitecture;
+	unique_ptr< const string > binaryArchitecture;
 	vector< shared_ptr< sregex > > packageNameRegexesToReinstall;
 	shared_ptr< const system::State > systemState;
 	vector< IndexEntry > indexEntries;

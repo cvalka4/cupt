@@ -39,7 +39,7 @@ class CUPT_API SourcePackage: public Package
 	/**
 	 * @param binaryArchitecture system binary architecture
 	 */
-	SourcePackage(const shared_ptr< const string >& binaryArchitecture);
+	SourcePackage(const string* binaryArchitecture);
 	vector< const SourceVersion* > getVersions() const;
 };
 

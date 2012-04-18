@@ -70,12 +70,12 @@ Package* CacheImpl::newBinaryPackage(const string& packageName) const
 		}
 	}
 
-	return new BinaryPackage(binaryArchitecture, needsReinstall);
+	return new BinaryPackage(binaryArchitecture.get(), needsReinstall);
 }
 
 Package* CacheImpl::newSourcePackage(const string& /* packageName */) const
 {
-	return new SourcePackage(binaryArchitecture);
+	return new SourcePackage(binaryArchitecture.get());
 }
 
 Package* CacheImpl::preparePackage(unordered_map< string, vector< PrePackageRecord > >& pre,

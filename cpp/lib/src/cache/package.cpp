@@ -26,7 +26,7 @@
 namespace cupt {
 namespace cache {
 
-Package::Package(const shared_ptr< const string >& binaryArchitecture)
+Package::Package(const string* binaryArchitecture)
 	: _binary_architecture(binaryArchitecture)
 {}
 

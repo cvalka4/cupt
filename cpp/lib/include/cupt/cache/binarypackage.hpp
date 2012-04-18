@@ -42,7 +42,7 @@ class CUPT_API BinaryPackage: public Package
 	 * @param allowReinstall allow reinstalling installed version of this package,
 	 * i.e. mangle the version string of installed version
 	 */
-	BinaryPackage(const shared_ptr< const string >& binaryArchitecture, bool allowReinstall);
+	BinaryPackage(const string* binaryArchitecture, bool allowReinstall);
 	/// gets list of versions
 	vector< const BinaryVersion* > getVersions() const;
 	/// gets installed version
