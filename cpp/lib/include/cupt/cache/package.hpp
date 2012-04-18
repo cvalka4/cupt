@@ -28,8 +28,7 @@ namespace cache {
 /// a container for all versions of the same package name
 class CUPT_API Package
 {
-	mutable vector< Version::InitializationParameters > __unparsed_versions;
-	mutable vector< unique_ptr< Version > >* __parsed_versions;
+	vector< unique_ptr< Version > > __parsed_versions;
 
 	CUPT_LOCAL void __merge_version(unique_ptr< Version >&&, vector< unique_ptr< Version > >& result) const;
 

@@ -27,40 +27,26 @@ namespace cupt {
 namespace cache {
 
 Package::Package(const shared_ptr< const string >& binaryArchitecture)
-	: __parsed_versions(NULL), _binary_architecture(binaryArchitecture)
+	: _binary_architecture(binaryArchitecture)
 {}
 
 void Package::addEntry(const Version::InitializationParameters& initParams)
 {
-	__unparsed_versions.push_back(initParams);
+	// TODO: do something with missing (or forget about)
+	// warn2(__("no valid versions available, discarding the package"));
+	try
+	{
+		__merge_version(_parse_version(initParams), __parsed_versions);
+	}
+	catch (Exception& e)
+	{
+		warn2(__("error while parsing a version for the package '%s'"), initParams.packageName);
+	}
 }
 
 const vector< unique_ptr< Version > >& Package::_get_versions() const
 {
-	if (! __parsed_versions)
-	{
-		// versions were not parsed yet
-		__parsed_versions = new vector< unique_ptr< Version > >();
-
-		FORIT(unparsedVersionIt, __unparsed_versions)
-		{
-			Version::InitializationParameters& initParams = *unparsedVersionIt;
-			try
-			{
-				__merge_version(_parse_version(initParams), *__parsed_versions);
-			}
-			catch (Exception& e)
-			{
-				warn2(__("error while parsing a version for the package '%s'"), initParams.packageName);
-			}
-		}
-		if (__parsed_versions->empty())
-		{
-			warn2(__("no valid versions available, discarding the package"));
-		}
-		decltype(__unparsed_versions)().swap(__unparsed_versions); // guaranteed version of 'clear && shrink_to_fit'
-	}
-	return *__parsed_versions;
+	return __parsed_versions;
 }
 
 vector< const Version* > Package::getVersions() const
@@ -159,9 +145,7 @@ const Version* Package::getSpecificVersion(const string& versionString) const
 }
 
 Package::~Package()
-{
-	delete __parsed_versions;
-}
+{}
 
 }
 }
