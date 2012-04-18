@@ -58,7 +58,7 @@ const vector< unique_ptr< Version > >& Package::_get_versions() const
 		{
 			warn2(__("no valid versions available, discarding the package"));
 		}
-		__unparsed_versions.clear();
+		decltype(__unparsed_versions)().swap(__unparsed_versions); // guaranteed version of 'clear && shrink_to_fit'
 	}
 	return *__parsed_versions;
 }
