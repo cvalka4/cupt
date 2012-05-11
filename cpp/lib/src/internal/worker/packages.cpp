@@ -179,6 +179,20 @@ set< string > __get_pseudo_essential_package_names(const Cache& cache, bool debu
 	return result;
 }
 
+const BinaryVersion* PackagesWorker::__get_fake_version_for_purge(const string& packageName)
+{
+	auto& versionPtr = __fake_versions_for_purge[packageName];
+	if (!versionPtr)
+	{
+		versionPtr.reset(new BinaryVersion);
+		versionPtr->packageName = packageName;
+		versionPtr->versionString = "<dummy>";
+		versionPtr->essential = false;
+	}
+
+	return versionPtr.get();
+}
+
 void __set_action_priority(const InnerAction* actionPtr, const InnerAction* previousActionPtr)
 {
 	/* priorities are assigned that way so the possible chains are sorted in
@@ -273,12 +287,7 @@ void PackagesWorker::__fill_actions(GraphAndAttributes& gaa)
 				}
 				if (!version)
 				{
-					// FIXME: memory leak
-					auto versionPtr = new BinaryVersion;
-					versionPtr->packageName = packageName;
-					versionPtr->versionString = "<dummy>";
-					versionPtr->essential = false;
-					version = versionPtr;
+					version = __get_fake_version_for_purge(packageName);
 				}
 
 				if (innerActionType != IA::Unpack)

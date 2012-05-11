@@ -87,7 +87,9 @@ struct Changeset
 class PackagesWorker: public virtual WorkerBase
 {
 	std::set< string > __auto_installed_package_names;
+	map< string, unique_ptr< BinaryVersion > > __fake_versions_for_purge;
 
+	const BinaryVersion* __get_fake_version_for_purge(const string&);
 	void __fill_actions(GraphAndAttributes&);
 	bool __build_actions_graph(GraphAndAttributes&);
 	map< string, pair< download::Manager::DownloadEntity, string > > __prepare_downloads();
