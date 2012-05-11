@@ -37,7 +37,7 @@ using cache::RelationExpression;
 using std::make_pair;
 
 InitialPackageEntry::InitialPackageEntry()
-	: sticked(false), modified(false)
+	: version(NULL), sticked(false), modified(false)
 {}
 
 BasicVertex::~BasicVertex()
