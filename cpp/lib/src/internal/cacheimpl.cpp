@@ -804,12 +804,11 @@ CacheImpl::getSatisfyingVersions(const RelationExpression& relationExpression) c
 		relationIt != relationExpression.end(); ++relationIt)
 	{
 		auto source = getSatisfyingVersions(*relationIt);
-		FORIT(versionIt, source)
+		for (const auto& version: source)
 		{
-			auto predicate = [versionIt](const BinaryVersion* v) { return *v == **versionIt; };
-			if (std::find_if(result.begin(), result.end(), predicate) == result.end())
+			if (std::find(result.begin(), result.end(), version) == result.end())
 			{
-				result.push_back(*versionIt);
+				result.push_back(version);
 			}
 		}
 	}
