@@ -757,30 +757,15 @@ static string colorizeByActionType(const Colorizer& colorizer,
 	return colorizer.colorize(input, color, !isAutoInstalled /* bold */);
 }
 
-bool wasOrWillBePackageAutoInstalled(const Cache& cache, const string& packageName,
-		const map< string, bool >& autoFlagChanges)
+bool wasOrWillBePackageAutoInstalled(const Resolver::SuggestedPackage& suggestedPackage)
 {
-	if (cache.isAutomaticallyInstalled(packageName))
-	{
-		return true;
-	}
-
-	auto autoFlagChangeIt = autoFlagChanges.find(packageName);
-	if (autoFlagChangeIt != autoFlagChanges.end())
-	{
-		if (autoFlagChangeIt->second) // "set as autoinstalled"
-		{
-			return true;
-		}
-	}
-
-	return false;
+	return suggestedPackage.automaticallyInstalledFlag;
 }
 
-static void printPackageName(const Cache& cache, const Colorizer& colorizer,
-		const string& packageName, WA::Type actionType, const map< string, bool >& autoFlagChanges)
+static void printPackageName(const Colorizer& colorizer, const string& packageName,
+		WA::Type actionType, const Resolver::SuggestedPackage& suggestedPackage)
 {
-	bool isAutoInstalled = wasOrWillBePackageAutoInstalled(cache, packageName, autoFlagChanges);
+	bool isAutoInstalled = wasOrWillBePackageAutoInstalled(suggestedPackage);
 
 	cout << colorizeByActionType(colorizer, packageName, actionType, isAutoInstalled);
 	if (actionType == WA::Remove || actionType == WA::Purge)
@@ -806,14 +791,14 @@ static string colorizeActionName(const Colorizer& colorizer, const string& actio
 	}
 }
 
-void addActionToSummary(const Cache& cache, WA::Type actionType, const string& actionName,
-		const Resolver::SuggestedPackages& suggestedPackages, const map< string, bool >& autoFlagChanges,
+void addActionToSummary(WA::Type actionType, const string& actionName,
+		const Resolver::SuggestedPackages& suggestedPackages,
 		Colorizer& colorizer, std::stringstream* summaryStreamPtr)
 {
 	size_t manuallyInstalledCount = std::count_if(suggestedPackages.begin(), suggestedPackages.end(),
-			[&cache, &autoFlagChanges](const pair< string, Resolver::SuggestedPackage >& arg)
+			[](const pair< string, Resolver::SuggestedPackage >& arg)
 			{
-				return !wasOrWillBePackageAutoInstalled(cache, arg.first, autoFlagChanges);
+				return !wasOrWillBePackageAutoInstalled(arg.second);
 			});
 	size_t autoInstalledCount = suggestedPackages.size() - manuallyInstalledCount;
 
@@ -869,14 +854,14 @@ struct PackageChangeInfoFlags
 
 void showPackageChanges(const Config& config, const Cache& cache, Colorizer& colorizer, WA::Type actionType,
 		const Resolver::SuggestedPackages& actionSuggestedPackages,
-		const map< string, bool >& autoFlagChanges, const map< string, ssize_t >& unpackedSizesPreview)
+		const map< string, ssize_t >& unpackedSizesPreview)
 {
 	PackageChangeInfoFlags showFlags(config, actionType);
 
 	for (const auto& it: actionSuggestedPackages)
 	{
 		const string& packageName = it.first;
-		printPackageName(cache, colorizer, packageName, actionType, autoFlagChanges);
+		printPackageName(colorizer, packageName, actionType, it.second);
 
 		showVersionInfoIfNeeded(cache, packageName, it.second, actionType, showFlags.versionFlags);
 
@@ -1023,8 +1008,8 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 
 				if (showSummary)
 				{
-					addActionToSummary(*cache, actionType, actionName, actionSuggestedPackages,
-							actionsPreview->autoFlagChanges, colorizer, &summaryStream);
+					addActionToSummary(actionType, actionName, actionSuggestedPackages,
+							colorizer, &summaryStream);
 				}
 				if (!showDetails)
 				{
@@ -1035,7 +1020,7 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 						colorizeActionName(colorizer, actionName, actionType)) << endl << endl;
 
 				showPackageChanges(*config, *cache, colorizer, actionType, actionSuggestedPackages,
-						actionsPreview->autoFlagChanges, unpackedSizesPreview);
+						unpackedSizesPreview);
 			}
 
 			showUnsatisfiedSoftDependencies(offer, showDetails, &summaryStream);
