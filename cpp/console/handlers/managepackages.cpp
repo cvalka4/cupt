@@ -1107,7 +1107,7 @@ void parseManagementOptions(Context& context, ManagePackages::Mode mode,
 	auto extraParser = [](const string& input) -> pair< string, string >
 	{
 		const set< string > actionModifierOptionNames = {
-			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy", "--iii"
+			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy", "--iii",
 			"--markauto", "--unmarkauto"
 		};
 		if (actionModifierOptionNames.count(input))
