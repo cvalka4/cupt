@@ -67,9 +67,6 @@ void NativeResolverImpl::__import_packages_to_reinstall()
 		// this also involves creating new entry in __initial_packages
 		auto& targetVersion = __initial_packages[*packageNameIt].version;
 		targetVersion = nullptr; // removed by default
-
-		// = this package was not installed by resolver
-		__manually_modified_package_names.insert(*packageNameIt);
 	}
 }
 
@@ -112,17 +109,9 @@ bool NativeResolverImpl::__prepare_version_no_stick(
 	return true;
 }
 
-// FIXME/API break/blocker: worker::Offer has to learn about autoinstalled flag change
 void NativeResolverImpl::setAutomaticallyInstalledFlag(const string& packageName, bool flagValue)
 {
-	if (flagValue)
-	{
-		__manually_modified_package_names.erase(packageName);
-	}
-	else
-	{
-		__manually_modified_package_names.insert(packageName);
-	}
+	__auto_status_overrides[packageName] = flagValue;
 }
 
 void NativeResolverImpl::installVersion(const BinaryVersion* version)
@@ -136,7 +125,6 @@ void NativeResolverImpl::installVersion(const BinaryVersion* version)
 	}
 
 	initialPackageEntry.sticked = true;
-	__manually_modified_package_names.insert(packageName);
 }
 
 void NativeResolverImpl::satisfyRelationExpression(const RelationExpression& relationExpression)
@@ -167,7 +155,6 @@ void NativeResolverImpl::removePackage(const string& packageName)
 	initialPackageEntry.sticked = true;
 	initialPackageEntry.modified = true;
 	initialPackageEntry.version = nullptr;
-	__manually_modified_package_names.insert(packageName);
 
 	if (__config->getBool("debug::resolver"))
 	{
@@ -245,6 +232,22 @@ SolutionContainer::iterator __full_chooser(SolutionContainer& solutions)
 	return __fair_chooser(solutions);
 }
 
+bool NativeResolverImpl::__compute_target_auto_status(const string& packageName) const
+{
+	auto overrideIt = __auto_status_overrides.find(packageName);
+	if (overrideIt != __auto_status_overrides.end())
+	{
+		return overrideIt->second;
+	}
+
+	if (__old_packages.count(packageName))
+	{
+		return __cache->isAutomaticallyInstalled(packageName);
+	}
+
+	return !__initial_packages.count(packageName);
+}
+
 AutoRemovalPossibility::Allow NativeResolverImpl::__is_candidate_for_auto_removal(const dg::Element* elementPtr)
 {
 	typedef AutoRemovalPossibility::Allow Allow;
@@ -274,7 +277,8 @@ AutoRemovalPossibility::Allow NativeResolverImpl::__is_candidate_for_auto_remova
 		}
 	}
 
-	return __auto_removal_possibility.isAllowed(*__cache, version, __old_packages.count(packageName));
+	return __auto_removal_possibility.isAllowed(version, __old_packages.count(packageName),
+			__compute_target_auto_status(packageName));
 }
 
 bool NativeResolverImpl::__clean_automatically_installed(Solution& solution)
@@ -755,7 +759,7 @@ Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 					}
 				}
 			}
-			suggestedPackage.manuallySelected = __manually_modified_package_names.count(packageName);
+			suggestedPackage.automaticallyInstalledFlag = __compute_target_auto_status(packageName);
 		}
 		else
 		{
