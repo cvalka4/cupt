@@ -27,6 +27,7 @@
 #include <internal/nativeresolver/solution.hpp>
 #include <internal/nativeresolver/score.hpp>
 #include <internal/nativeresolver/decisionfailtree.hpp>
+#include <internal/nativeresolver/autoremovalpossibility.hpp>
 
 namespace cupt {
 namespace internal {
@@ -43,52 +44,39 @@ class NativeResolverImpl
 	typedef Resolver::AutoRemovalReason AutoRemovalReason;
 	typedef Resolver::SynchronizationReason SynchronizationReason;
 	typedef Resolver::RelationExpressionReason RelationExpressionReason;
-
-	struct Action
-	{
-		const dg::Element* oldElementPtr; // may be NULL
-		const dg::Element* newElementPtr; // many not be NULL
-		shared_ptr< const Reason > reason;
-		ScoreChange profit;
-		PackageEntry::IntroducedBy introducedBy;
-		size_t brokenElementPriority;
-	};
+	typedef Solution::Action Action;
 
 	shared_ptr< const Config > __config;
 	shared_ptr< const Cache > __cache;
 	set< string > __manually_modified_package_names;
 	unique_ptr< SolutionStorage > __solution_storage;
 	ScoreManager __score_manager;
+	AutoRemovalPossibility __auto_removal_possibility;
 
-	map< string, shared_ptr< const BinaryVersion > > __old_packages;
+	map< string, const BinaryVersion* > __old_packages;
 	map< string, dg::InitialPackageEntry > __initial_packages;
 	RelationLine __satisfy_relation_expressions;
 	RelationLine __unsatisfy_relation_expressions;
+	BinaryVersion __custom_relations_version;
 
 	DecisionFailTree __decision_fail_tree;
 	bool __any_solution_was_found;
 
 	void __import_installed_versions();
 	void __import_packages_to_reinstall();
-	bool __prepare_version_no_stick(const shared_ptr< const BinaryVersion >&,
+	bool __prepare_version_no_stick(const BinaryVersion*,
 			dg::InitialPackageEntry&);
-	float __get_version_weight(const shared_ptr< const BinaryVersion >&) const;
-	float __get_action_profit(const shared_ptr< const BinaryVersion >&,
-			const shared_ptr< const BinaryVersion >&) const;
-	bool __is_candidate_for_auto_removal(const dg::Element*,
-		const std::function< bool (const string&) >, bool);
-	void __clean_automatically_installed(Solution&);
+	float __get_version_weight(const BinaryVersion*) const;
+	float __get_action_profit(const BinaryVersion*, const BinaryVersion*) const;
+	AutoRemovalPossibility::Allow __is_candidate_for_auto_removal(const dg::Element*);
+	bool __clean_automatically_installed(Solution&);
 	void __require_strict_relation_expressions();
-	void __pre_apply_action(const Solution&, Solution&, unique_ptr< Action > &&);
+	void __pre_apply_action(const Solution&, Solution&, unique_ptr< Action > &&, size_t);
 	void __calculate_profits(vector< unique_ptr< Action > >& actions) const;
 	void __pre_apply_actions_to_solution_tree(
 			std::function< void (const shared_ptr< Solution >&) > callback,
 			const shared_ptr< Solution >&, vector< unique_ptr< Action > >&);
 
-	void __initial_validate_pass(Solution&);
-	void __validate_element(Solution&, const dg::Element*, size_t);
-	void __validate_changed_package(Solution&, const dg::Element*,
-			const dg::Element*, size_t);
 	void __post_apply_action(Solution&);
 	void __final_verify_solution(const Solution&);
 
@@ -99,6 +87,7 @@ class NativeResolverImpl
 
 	void __add_actions_to_fix_dependency(vector< unique_ptr< Action > >&, const Solution&,
 			const dg::Element*);
+	void __prepare_reject_requests(vector< unique_ptr< Action > >& actions) const;
 	Resolver::UserAnswer::Type __propose_solution(
 			const Solution&, Resolver::CallbackType, bool);
 
@@ -109,7 +98,7 @@ class NativeResolverImpl
  public:
 	NativeResolverImpl(const shared_ptr< const Config >&, const shared_ptr< const Cache >&);
 
-	void installVersion(const shared_ptr< const BinaryVersion >&);
+	void installVersion(const BinaryVersion*);
 	void satisfyRelationExpression(const RelationExpression&);
 	void unsatisfyRelationExpression(const RelationExpression&);
 	void removePackage(const string& packageName);

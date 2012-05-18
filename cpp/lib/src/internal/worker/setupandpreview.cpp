@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -33,7 +33,7 @@ void SetupAndPreviewWorker::__generate_action_preview(const string& packageName,
 {
 	Action::Type action = Action::Count; // invalid
 
-	const shared_ptr< const BinaryVersion >& supposedVersion = suggestedPackage.version;
+	const auto& supposedVersion = suggestedPackage.version;
 	auto installedInfo = _cache->getSystemState()->getInstalledInfo(packageName);
 
 	if (supposedVersion)
@@ -52,7 +52,7 @@ void SetupAndPreviewWorker::__generate_action_preview(const string& packageName,
 			auto package = _cache->getBinaryPackage(packageName);
 			if (!package)
 			{
-				fatal("internal error: the binary package '%s' does not exist", packageName.c_str());
+				fatal2i("the binary package '%s' does not exist", packageName);
 			}
 			auto installedVersion = package->getInstalledVersion();
 
@@ -162,7 +162,7 @@ void SetupAndPreviewWorker::__generate_actions_preview()
 
 	if (!__desired_state)
 	{
-		fatal("worker desired state is not given");
+		fatal2(__("worker: the desired state is not given"));
 	}
 
 	const bool purge = _config->getBool("cupt::worker::purge");
@@ -187,7 +187,7 @@ void SetupAndPreviewWorker::setPackagePurgeFlag(const string& packageName, bool 
 	auto desiredIt = __desired_state->find(packageName);
 	if (desiredIt == __desired_state->end())
 	{
-		fatal("there is no package '%s' in the desired state", packageName.c_str());
+		fatal2(__("there is no package '%s' in the desired state"), packageName);
 	}
 	auto sourceActionType = value ? Action::Remove : Action::Purge;
 	__actions_preview->groups[sourceActionType].erase(packageName);
@@ -224,7 +224,7 @@ map< string, ssize_t > SetupAndPreviewWorker::getUnpackedSizesPreview() const
 		auto oldPackage = _cache->getBinaryPackage(packageName);
 		if (oldPackage)
 		{
-			const shared_ptr< const BinaryVersion >& oldVersion = oldPackage->getInstalledVersion();
+			const auto& oldVersion = oldPackage->getInstalledVersion();
 			if (oldVersion)
 			{
 				oldInstalledSize = oldVersion->installedSize;
@@ -233,7 +233,7 @@ map< string, ssize_t > SetupAndPreviewWorker::getUnpackedSizesPreview() const
 
 		// new part
 		ssize_t newInstalledSize = 0;
-		const shared_ptr< const BinaryVersion >& newVersion = __desired_state->find(packageName)->second.version;
+		const auto& newVersion = __desired_state->find(packageName)->second.version;
 		if (newVersion)
 		{
 			newInstalledSize = newVersion->installedSize;
@@ -261,7 +261,7 @@ pair< size_t, size_t > SetupAndPreviewWorker::getDownloadSizesPreview() const
 
 		FORIT(it, suggestedPackages)
 		{
-			const shared_ptr< const BinaryVersion >& version = it->second.version;
+			const auto& version = it->second.version;
 			auto size = version->file.size;
 
 			totalBytes += size;

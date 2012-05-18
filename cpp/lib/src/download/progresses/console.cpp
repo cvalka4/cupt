@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -53,7 +53,7 @@ class ConsoleProgressImpl
  public:
 	ConsoleProgressImpl();
 	void newDownload(const DownloadRecord& record, const string& longAlias);
-	void finishedDownload(const string& uri, const string& result, const string& longAlias);
+	void finishedDownload(const string& uri, const string& result, size_t number);
 	void finish(uint64_t size, size_t time);
 
 	bool isUpdateNeeded(bool immediate);
@@ -85,11 +85,11 @@ void ConsoleProgressImpl::nonBlockingPrint(const string& s)
 	bool statusIsModified = false;
 	if (oldStatus == -1)
 	{
-		warn("unable to get standard error stream status flags: fcntl failed: EEE");
+		warn2e(__("%s() failed"), "fcntl");
 	}
 	else if (fcntl(STDERR_FILENO, F_SETFL, (long)oldStatus | O_NONBLOCK) == -1)
 	{
-		warn("unable to make standard error stream non-blocking: fcntl failed: EEE");
+		warn2e(__("%s() failed"), "fcntl");
 	}
 	else
 	{
@@ -102,14 +102,14 @@ void ConsoleProgressImpl::nonBlockingPrint(const string& s)
 	{
 		if (fcntl(STDERR_FILENO, F_SETFL, (long)oldStatus) == -1)
 		{
-			warn("unable to make standard error stream blocking again: fcntl failed: EEE");
+			warn2e(__("%s() failed"), "fcntl");
 		}
 	}
 }
 
 void ConsoleProgressImpl::termClean()
 {
-	nonBlockingPrint(string(getTerminalWidth(), ' ') + "\r");
+	nonBlockingPrint(string("\r") + string(getTerminalWidth(), ' ') + "\r");
 }
 
 void ConsoleProgressImpl::termPrint(const string& s, const string& rightAppendage)
@@ -125,7 +125,6 @@ void ConsoleProgressImpl::termPrint(const string& s, const string& rightAppendag
 		outputString += s + string(allowedWidth - s.size(), ' ');
 	}
 	outputString += rightAppendage;
-	outputString += "\r";
 	nonBlockingPrint(outputString);
 }
 
@@ -137,19 +136,17 @@ void ConsoleProgressImpl::newDownload(const DownloadRecord& record, const string
 		sizeSuffix = string(" [") + humanReadableSizeString(record.size) + "]";
 	}
 	termClean();
-	nonBlockingPrint(__("Get") + ":" + lexical_cast< string >(record.number) + " " +
-			longAlias + sizeSuffix + "\n");
+	nonBlockingPrint(format2("Get:%zu %s%s\n", record.number, longAlias, sizeSuffix));
 }
 
 void ConsoleProgressImpl::finishedDownload(const string& uri,
-		const string& result, const string& longAlias)
+		const string& result, size_t number)
 {
 	if (!result.empty())
 	{
 		// some error occured, output it
 		termClean();
-		nonBlockingPrint(sf("W: downloading '%s' (uri '%s') failed: %s\n",
-				longAlias.c_str(), uri.c_str(), result.c_str()));
+		nonBlockingPrint(format2("Fail:%zu %s (uri '%s')\n", number, result, uri));
 	}
 }
 
@@ -207,7 +204,7 @@ void ConsoleProgressImpl::updateView(vector< DownloadRecordForPrint > records,
 				return left.record.number < right.record.number;
 			});
 
-	string viewString = sf("%d%% ", overallDownloadPercent);
+	string viewString = format2("%d%% ", overallDownloadPercent);
 
 	FORIT(it, records)
 	{
@@ -218,11 +215,11 @@ void ConsoleProgressImpl::updateView(vector< DownloadRecordForPrint > records,
 		}
 		else if (it->record.size != (size_t)-1 && it->record.size != 0 /* no sense for empty files */)
 		{
-			suffix = sf("/%s %.0f%%", humanReadableSizeString(it->record.size).c_str(),
+			suffix = format2("/%s %.0f%%", humanReadableSizeString(it->record.size),
 					(float)it->record.downloadedSize / it->record.size * 100);
 		}
-		viewString += sf("[%u %s %s%s]", it->record.number, it->shortAlias.c_str(),
-				humanReadableSizeString(it->record.downloadedSize).c_str(), suffix.c_str());
+		viewString += format2("[%u %s %s%s]", it->record.number, it->shortAlias,
+				humanReadableSizeString(it->record.downloadedSize), suffix);
 	}
 	auto speedAndTimeAppendage = string("| ") + humanReadableSpeedString(speed) +
 			string(" | ETA: ") + humanReadableDifftimeString(overallEstimatedTime);
@@ -232,8 +229,8 @@ void ConsoleProgressImpl::updateView(vector< DownloadRecordForPrint > records,
 void ConsoleProgressImpl::finish(uint64_t size, size_t time)
 {
 	termClean();
-	nonBlockingPrint(sf(__("Fetched %s in %s.\n"),
-			humanReadableSizeString(size).c_str(), humanReadableDifftimeString(time).c_str()));
+	nonBlockingPrint(format2(__("Fetched %s in %s.\n"),
+			humanReadableSizeString(size), humanReadableDifftimeString(time)));
 }
 
 }
@@ -280,7 +277,17 @@ void ConsoleProgress::updateHook(bool immediate)
 
 void ConsoleProgress::finishedDownloadHook(const string& uri, const string& result)
 {
-	__impl->finishedDownload(uri, result, getLongAliasForUri(uri));
+	auto finishedDownloadRecordIt = this->getDownloadRecords().find(uri);
+	size_t recordNumber = 0;
+	if (finishedDownloadRecordIt != this->getDownloadRecords().end())
+	{
+		recordNumber = finishedDownloadRecordIt->second.number;
+	}
+	else
+	{
+		warn2("internal error: console download progress: no existing download record for the uri '%s'", uri);
+	}
+	__impl->finishedDownload(uri, result, recordNumber);
 }
 
 void ConsoleProgress::finishHook()

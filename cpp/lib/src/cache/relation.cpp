@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -127,7 +127,7 @@ void Relation::__init(string::const_iterator start, string::const_iterator end)
 	{
 		// no package name, bad
 		string unparsed(start, end);
-		fatal("failed to parse package name in relation '%s'", unparsed.c_str());
+		fatal2(__("failed to parse a package name in the relation '%s'"), unparsed);
 	}
 
 	while (current != end && *current == ' ')
@@ -141,7 +141,7 @@ void Relation::__init(string::const_iterator start, string::const_iterator end)
 		if (!__parse_versioned_info(current, end))
 		{
 			string unparsed(start, end);
-			fatal("failed to parse versioned info in relation '%s'", unparsed.c_str()); // what else can we do?..
+			fatal2(__("failed to parse a version part in the relation '%s'"), unparsed);
 		}
 	}
 	else
@@ -159,12 +159,6 @@ Relation::Relation(const string& unparsed)
 {
 	__init(unparsed.begin(), unparsed.end());
 }
-
-Relation::Relation(Relation&& other)
-	: packageName(std::move(other.packageName)),
-	relationType(other.relationType),
-	versionString(std::move(other.versionString))
-{}
 
 Relation::~Relation()
 {}
@@ -226,7 +220,7 @@ void ArchitecturedRelation::__init(string::const_iterator start, string::const_i
 	}
 	if (*start != '[' || *(end-1) != ']')
 	{
-		fatal("unable to parse architecture filters '%s'", string(start, end).c_str());
+		fatal2(__("unable to parse architecture filters '%s'"), string(start, end));
 	}
 	++start;
 	--end;
@@ -240,18 +234,12 @@ ArchitecturedRelation::ArchitecturedRelation(const string& unparsed)
 	__init(std::find(unparsed.begin(), unparsed.end(), '['), unparsed.end());
 }
 
-// TODO/API break/: make this constructor explicit too
 ArchitecturedRelation::ArchitecturedRelation(
 		pair< string::const_iterator, string::const_iterator > input)
 	: Relation(make_pair(input.first, std::find(input.first, input.second, '[')))
 {
 	__init(std::find(input.first, input.second, '['), input.second);
 }
-
-ArchitecturedRelation::ArchitecturedRelation(ArchitecturedRelation&& other)
-	: Relation(static_cast< Relation&& >(other)),
-	architectureFilters(std::move(other.architectureFilters))
-{}
 
 string ArchitecturedRelation::toString() const
 {
@@ -279,12 +267,11 @@ bool __is_architectured_relation_eligible(
 	if (!architectureFilters[0].empty() && architectureFilters[0][0] == '!')
 	{
 		// negative architecture specifications, see Debian Policy §7.1
-		FORIT(architectureFilterIt, architectureFilters)
+		for (string architectureFilter: architectureFilters)
 		{
-			string architectureFilter = *architectureFilterIt;
 			if (architectureFilter.empty() || architectureFilter[0] != '!')
 			{
-				warn("non-negative architecture filter '%s'", architectureFilter.c_str());
+				warn2(__("non-negative architecture filter '%s'"), architectureFilter);
 			}
 			else
 			{
@@ -300,9 +287,8 @@ bool __is_architectured_relation_eligible(
 	else
 	{
 		// positive architecture specifications, see Debian Policy §7.1
-		FORIT(architectureFilterIt, architectureFilters)
+		for (const string& architectureFilter: architectureFilters)
 		{
-			const string& architectureFilter = *architectureFilterIt;
 			if (internal::architectureMatch(currentArchitecture, architectureFilter))
 			{
 				return true; // our case
@@ -316,13 +302,12 @@ RelationLine ArchitecturedRelationLine::toRelationLine(const string& currentArch
 {
 	RelationLine result;
 
-	FORIT(architecturedRelationExpressionIt, *this)
+	for (const auto& architecturedRelationExpression: *this)
 	{
 		RelationExpression newRelationExpression;
 
-		FORIT(architecturedRelationIt, *architecturedRelationExpressionIt)
+		for (const auto& architecturedRelation: architecturedRelationExpression)
 		{
-			const ArchitecturedRelation& architecturedRelation = *architecturedRelationIt;
 			if (__is_architectured_relation_eligible(architecturedRelation, currentArchitecture))
 			{
 				newRelationExpression.push_back(Relation(architecturedRelation));
@@ -331,7 +316,7 @@ RelationLine ArchitecturedRelationLine::toRelationLine(const string& currentArch
 
 		if (!newRelationExpression.empty())
 		{
-			result.push_back(newRelationExpression);
+			result.push_back(std::move(newRelationExpression));
 		}
 	}
 
@@ -341,14 +326,12 @@ RelationLine ArchitecturedRelationLine::toRelationLine(const string& currentArch
 string RelationExpression::getHashString() const
 {
 	size_t targetLength = 0;
-	FORIT(relationIt, *this)
+	for (const Relation& relation: *this)
 	{
-		const Relation& relation = *relationIt;
-
 		targetLength += 1 + relation.packageName.size();
 		if (relation.relationType != Relation::Types::None)
 		{
-			targetLength += relation.versionString.size() + 2;
+			targetLength += relation.versionString.size() + 1;
 		}
 	}
 	if (targetLength) // not empty relation expression
@@ -360,10 +343,8 @@ string RelationExpression::getHashString() const
 	auto p = result.begin();
 	auto beginIt = p;
 
-	FORIT(relationIt, *this)
+	for (const Relation& relation: *this)
 	{
-		const Relation& relation = *relationIt;
-
 		if (p != beginIt) // not a start
 		{
 			*(p++) = '|';
@@ -373,8 +354,11 @@ string RelationExpression::getHashString() const
 
 		if (relation.relationType != Relation::Types::None)
 		{
-			*(p++) = ' ';
-			*(p++) = ('0' + relation.relationType);
+			// this assertion assures that '\1' + relation.relationType is a
+			// non-printable character which cannot be a part of packageName
+			static_assert(Relation::Types::None < 16, "internal error: Relation::Types::None >= 16'");
+			*(p++) = ('\1' + relation.relationType);
+
 			p = std::copy(relation.versionString.begin(), relation.versionString.end(), p);
 		}
 	}
@@ -393,7 +377,7 @@ void RelationExpressionType::__init(string::const_iterator begin, string::const_
 			/* split OR groups */ \
 			auto callback = [this](string::const_iterator begin, string::const_iterator end) \
 			{ \
-				this->push_back(UnderlyingElement(make_pair(begin, end))); \
+				this->emplace_back(make_pair(begin, end)); \
 			}; \
 			internal::processSpacePipeSpaceDelimitedStrings(begin, end, callback); \
 			return; \
@@ -401,7 +385,7 @@ void RelationExpressionType::__init(string::const_iterator begin, string::const_
 	} \
  \
 	/* if we reached here, we didn't find OR groups */ \
-	push_back(UnderlyingElement(make_pair(begin, end))); \
+	emplace_back(make_pair(begin, end)); \
 } \
  \
 RelationExpressionType::RelationExpressionType() \
@@ -416,10 +400,6 @@ RelationExpressionType::RelationExpressionType(const string& expression) \
 { \
 	__init(expression.begin(), expression.end()); \
 } \
-\
-RelationExpressionType::RelationExpressionType(RelationExpressionType&& other) \
-	: vector< UnderlyingElement >(std::move(other)) \
-{} \
 \
 RelationExpressionType::~RelationExpressionType() \
 {} \
@@ -446,7 +426,7 @@ void RelationLineType::__init(string::const_iterator begin, string::const_iterat
 { \
 	auto callback = [this](string::const_iterator begin, string::const_iterator end) \
 	{ \
-		this->push_back(UnderlyingElement(make_pair(begin, end))); \
+		this->emplace_back(make_pair(begin, end)); \
 	}; \
  \
 	internal::processSpaceCommaSpaceDelimitedStrings(begin, end, callback); \

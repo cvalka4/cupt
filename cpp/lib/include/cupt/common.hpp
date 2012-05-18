@@ -68,6 +68,7 @@ using std::pair;
 using std::shared_ptr;
 using std::static_pointer_cast;
 using std::dynamic_pointer_cast;
+using std::unique_ptr;
 
 /// message file descriptor
 /**
@@ -76,56 +77,7 @@ using std::dynamic_pointer_cast;
  */
 CUPT_API extern int messageFd;
 
-/// sends an error message and throws exception
-/**
- * This function:
- *  -# substitutes at most one @c "EEE" substring (leftest one) in @a format
- *  -# perform @c printf against computed string with variable arguments
- *  -# writes string @c "E:" + computed string + @c "\n" to @ref messageFd
- *  -# throws Exception with computed string as message
- *  .
- * @param format @c printf format string (see @c printf(3))
- *
- * @par Example:
- * @code
- * if (!fopen("abcd.dat", "r"))
- * {
- *   fatal("unable to open file '%s': EEE", "abcd.dat");
- * }
- * @endcode
- * may send @c "E: unable to open file 'abcd.dat': Permission denied\n" to
- * @ref messageFd and throw Exception with message @c "unable to open
- * file 'abcd.dat': Permission denied"
- */
-void CUPT_API fatal(const char* format, ...);
-
-/// sends a warning message
-/**
- * This function:
- *  -# substitutes at most one @c "EEE" substring (leftest one) in @a format
- *  -# perform @c printf against computed string with variable arguments
- *  -# writes string @c "W:" + computed string + @c "\n" to @ref messageFd
- *  .
- * @param format @c printf format string
- *
- * @see fatal
- */
-void CUPT_API warn(const char* format, ...);
-
-/// sends a debug message
-/**
- * Equal to @ref warn, only sends @c "D:" instead of @c "W:"
- */
-void CUPT_API debug(const char* format, ...);
-
-/// sends a simulate message
-/**
- * Equal to @ref warn, only sends @c "S:" instead of @c "W:"
- */
-void CUPT_API simulate(const char* format, ...);
-
 /// @cond
-CUPT_API string sf(const string& format, ...);
 CUPT_API string join(const string& joiner, const vector< string >& parts);
 CUPT_API string humanReadableSizeString(uint64_t bytes);
 /// @endcond
@@ -135,7 +87,7 @@ CUPT_API string humanReadableSizeString(uint64_t bytes);
  * @param message input string
  * @return localized message
  */
-string CUPT_API __(const char* message);
+CUPT_API const char* __(const char* message);
 
 /// reads package name in range
 /**
@@ -185,6 +137,8 @@ bool CUPT_API checkVersionString(const string& versionString, bool throwOnError 
 int CUPT_API compareVersionStrings(const string& left, const string& right);
 
 } // namespace
+
+#include <cupt/format2.hpp>
 
 #endif
 

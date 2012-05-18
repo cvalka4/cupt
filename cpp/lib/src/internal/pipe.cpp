@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2012 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -18,10 +18,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <cupt/pipe.hpp>
+#include <internal/pipe.hpp>
 
 namespace cupt {
-
 namespace internal {
 
 struct PipeData
@@ -36,13 +35,10 @@ struct PipeData
 
 void PipeData::close(int fd)
 {
-	const char* part = (fd == inputFd ? "input" : "output");
 	if (::close(fd) == -1)
 	{
-		warn("unable to close %s part of '%s' pipe: EEE", part, name.c_str());
+		warn2e(__("unable to close a part of the '%s' pipe"), name);
 	}
-}
-
 }
 
 Pipe::Pipe(const string& name_)
@@ -53,7 +49,7 @@ Pipe::Pipe(const string& name_)
 	int pipeFdPair[2];
 	if (pipe(pipeFdPair) == -1)
 	{
-		fatal("unable to create '%s' pipe: EEE", __data->name.c_str());
+		fatal2e(__("unable to create the '%s' pipe"), __data->name);
 	}
 
 	// setting FD_CLOEXEC flags
@@ -63,13 +59,11 @@ Pipe::Pipe(const string& name_)
 		int oldFdFlags = fcntl(fd, F_GETFD);
 		if (oldFdFlags < 0)
 		{
-			fatal("unable to create '%s' pipe: unable to get file descriptor flags: EEE",
-					__data->name.c_str());
+			fatal2e(__("unable to create the '%s' pipe: unable to get file descriptor flags"), __data->name);
 		}
 		if (fcntl(fd, F_SETFD, oldFdFlags | FD_CLOEXEC) == -1)
 		{
-			fatal("unable to create '%s' pipe: unable to set the close-on-exec flag: EEE",
-					__data->name.c_str());
+			fatal2e(__("unable to create the '%s' pipe: unable to set the close-on-exec flag"), __data->name);
 		}
 	}
 
@@ -115,5 +109,6 @@ Pipe::~Pipe()
 	delete __data;
 }
 
+}
 }
 

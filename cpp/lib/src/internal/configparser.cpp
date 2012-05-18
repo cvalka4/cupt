@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -33,7 +33,7 @@ void ConfigParser::parse(const string& path)
 	File file(path, "r", openError);
 	if (!openError.empty())
 	{
-		fatal("unable to open file '%s': %s", path.c_str(), openError.c_str());
+		fatal2(__("unable to open the file '%s': %s"), path, openError);
 	}
 
 	string block;
@@ -41,16 +41,20 @@ void ConfigParser::parse(const string& path)
 
 	__option_prefix = "";
 	__errors.clear();
-	__current = block.begin();
+	__current = __begin = block.begin();
 	__end = block.end();
 	__skip_spaces_and_comments();
 	try
 	{
 		__statements();
+		if (__current != __end)
+		{
+			__error_out();
+		}
 	}
 	catch (Exception&)
 	{
-		fatal("unable to parse config file '%s'", path.c_str());
+		fatal2(__("unable to parse the config file '%s'"), path);
 	}
 }
 
@@ -241,7 +245,13 @@ bool ConfigParser::__string(const char* str)
 void ConfigParser::__skip_spaces_and_comments()
 {
 	static const sregex skipRegex = sregex::compile(
-			"(?:" "\\s+" "|" "(?:#\\s|//).*$" ")+", regex_constants::not_dot_newline);
+			"(?:"
+				"\\s+" // empty line
+				"|" // ... or ...
+				"(?:#\\s|//)[^\\n]*$" // single comment line
+				"|" // ... or ...
+				"/\\*.*?\\*/" // C++-like multiline comment
+			")+");
 	smatch m;
 	if (regex_search(__current, __end, m, skipRegex, regex_constants::match_continuous))
 	{
@@ -265,7 +275,7 @@ string ConfigParser::__get_lexem_description(Lexem::Type type)
 		case Lexem::Value: return __("option value (quoted string)");
 		case Lexem::Name: return __("option name (letters, numbers, slashes, points, dashes, double colons allowed)");
 		default:
-			fatal("internal error: no description for lexem #%d", int(type));
+			fatal2i("no description for lexem #%d", int(type));
 	}
 	return string(); // unreachable
 }
@@ -275,16 +285,18 @@ void ConfigParser::__error_out()
 	vector< string > lexemDescriptions;
 	std::transform(__errors.begin(), __errors.end(),
 			std::back_inserter(lexemDescriptions), __get_lexem_description);
-	string errorDescription = join(" or ", lexemDescriptions);
+	string errorDescription = join(__(" or "), lexemDescriptions);
 
-	ssize_t contextLength = 40;
-	if (__end - __current < contextLength)
+	size_t lineNumber = std::count(__begin, __current, '\n') + 1;
+	auto lastEndLine = __current;
+	while (lastEndLine >= __begin && *lastEndLine != '\n')
 	{
-		contextLength = __end - __current;
+		--lastEndLine;
 	}
-	string context(__current, __current + contextLength);
+	size_t charNumber = __current - lastEndLine;
 
-	fatal("a syntax error: expected: %s before '%s'", errorDescription.c_str(), context.c_str());
+	fatal2(__("syntax error: line %u, character %u: expected: %s"),
+			lineNumber, charNumber, errorDescription);
 }
 
 } // namespace

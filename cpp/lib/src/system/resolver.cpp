@@ -31,7 +31,7 @@ string Resolver::AutoRemovalReason::toString() const
 }
 
 Resolver::RelationExpressionReason::RelationExpressionReason(
-		const shared_ptr< const BinaryVersion >& version_,
+		const BinaryVersion* version_,
 		BinaryVersion::RelationTypes::Type dependencyType_,
 		const cache::RelationExpression& relationExpression_)
 	: version(version_), dependencyType(dependencyType_),
@@ -52,29 +52,27 @@ string Resolver::RelationExpressionReason::toString() const
 	auto dependencyTypeTranslationIt = dependencyTypeTranslations.find(dependencyType);
 	if (dependencyTypeTranslationIt == dependencyTypeTranslations.end())
 	{
-		warn("unsupported reason dependency type '%s'",
-				BinaryVersion::RelationTypes::strings[dependencyType].c_str());
+		warn2(__("unsupported reason dependency type '%s'"),
+				BinaryVersion::RelationTypes::strings[dependencyType]);
 		return string();
 	}
 	else
 	{
-		return sf("%s %s %s '%s'",
-				version->packageName.c_str(), version->versionString.c_str(),
-				dependencyTypeTranslationIt->second.c_str(),
-				relationExpression.toString().c_str());
+		return format2("%s %s %s '%s'", version->packageName, version->versionString,
+				dependencyTypeTranslationIt->second, relationExpression.toString());
 	}
 }
 
 Resolver::SynchronizationReason::SynchronizationReason(
-		const shared_ptr< const BinaryVersion >& version_,
+		const BinaryVersion* version_,
 		const string& packageName_)
 	: version(version_), relatedPackageName(packageName_)
 {}
 
 string Resolver::SynchronizationReason::toString() const
 {
-	return sf(__("%s: synchronization with %s %s"), relatedPackageName.c_str(),
-			version->packageName.c_str(), version->versionString.c_str());
+	return format2(__("%s: synchronization with %s %s"), relatedPackageName,
+			version->packageName, version->versionString);
 }
 
 }

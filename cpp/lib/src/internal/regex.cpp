@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -52,7 +52,7 @@ shared_ptr< sregex > stringToRegex(const string& input)
 	}
 	catch (regex_error& e)
 	{
-		fatal("invalid regular expression '%s'", input.c_str());
+		fatal2(__("invalid regular expression '%s'"), input);
 	}
 	return result;
 }

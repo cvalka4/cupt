@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -19,6 +19,7 @@
 #include <cstring>
 #include <map>
 using std::map;
+#include <sstream>
 
 #include <common/regex.hpp>
 
@@ -28,7 +29,46 @@ using std::map;
 #include "misc.hpp"
 #include "handlers.hpp"
 
-string parseCommonOptions(int argc, char** argv, shared_ptr< Config > config, vector< string >& unparsed)
+void parseReleaseLimit(Config& config, const string& limitName, const string& included, const string& excluded)
+{
+	auto setLimitList = [&config](const string& listOptionName, const string& valuesString)
+	{
+		std::istringstream valueStream(valuesString);
+		string value;
+		while (std::getline(valueStream, value, ','))
+		{
+			config.setList(listOptionName, value);
+		}
+	};
+
+	auto limitOptionName = string("cupt::cache::limit-releases::by-") + limitName;
+	if (!included.empty() && !excluded.empty())
+	{
+		fatal2(__("options '--include-%ss' and '--exclude-%ss' cannot be specified together"),
+				limitName, limitName);
+	}
+	else if (!included.empty())
+	{
+		config.setScalar(limitOptionName + "::type", "include");
+		setLimitList(limitOptionName, included);
+	}
+	else if (!excluded.empty())
+	{
+		config.setScalar(limitOptionName + "::type", "exclude");
+		setLimitList(limitOptionName, excluded);
+	}
+}
+
+void parseReleaseLimits(Config& config, const string& includedArchives, const string& excludedArchives,
+		const string& includedCodenames, const string& excludedCodenames)
+{
+	parseReleaseLimit(config, "archive", includedArchives, excludedArchives);
+	parseReleaseLimit(config, "codename", includedCodenames, excludedCodenames);
+}
+
+void handleQuietOption(const Config&);
+
+string parseCommonOptions(int argc, char** argv, Config& config, vector< string >& unparsed)
 {
 	if (argc == 3)
 	{
@@ -44,6 +84,7 @@ string parseCommonOptions(int argc, char** argv, shared_ptr< Config > config, ve
 	bpo::options_description options("Common options");
 	vector< string > directOptions;
 	string targetRelease;
+	string includedArchives, excludedArchives, includedCodenames, excludedCodenames;
 	options.add_options()
 		("important,i", "")
 		("option,o", bpo::value< vector< string > >(&directOptions))
@@ -52,6 +93,10 @@ string parseCommonOptions(int argc, char** argv, shared_ptr< Config > config, ve
 		("no-all-versions", "")
 		("target-release", bpo::value< string >(&targetRelease))
 		("default-release,t", bpo::value< string >(&targetRelease))
+		("include-archives", bpo::value< string >(&includedArchives))
+		("exclude-archives", bpo::value< string >(&excludedArchives))
+		("include-codenames", bpo::value< string >(&includedCodenames))
+		("exclude-codenames", bpo::value< string >(&excludedCodenames))
 		("simulate,s", "")
 		("quiet,q", "")
 		("command", bpo::value< string >(&command))
@@ -85,47 +130,48 @@ string parseCommonOptions(int argc, char** argv, shared_ptr< Config > config, ve
 		{ // processing
 			if (command.empty())
 			{
-				fatal("no command specified");
+				fatal2(__("no command specified"));
 			}
 			if (variablesMap.count("important"))
 			{
-				config->setScalar("apt::cache::important", "yes");
+				config.setScalar("apt::cache::important", "yes");
 			}
 			if (variablesMap.count("recurse"))
 			{
-				config->setScalar("apt::cache::recursedepends", "yes");
+				config.setScalar("apt::cache::recursedepends", "yes");
 			}
 			if (!targetRelease.empty())
 			{
-				config->setScalar("apt::default-release", targetRelease);
+				config.setScalar("apt::default-release", targetRelease);
 			}
 			if (variablesMap.count("all-versions"))
 			{
-				config->setScalar("apt::cache::allversions", "yes");
+				config.setScalar("apt::cache::allversions", "yes");
 			}
 			if (variablesMap.count("no-all-versions"))
 			{
-				config->setScalar("apt::cache::allversions", "no");
+				config.setScalar("apt::cache::allversions", "no");
 			}
 			if (variablesMap.count("simulate"))
 			{
-				config->setScalar("cupt::worker::simulate", "yes");
+				config.setScalar("cupt::worker::simulate", "yes");
 			}
 			if (variablesMap.count("quiet"))
 			{
-				config->setScalar("quiet", "yes");
+				config.setScalar("quiet", "yes");
 				handleQuietOption(config);
 			}
+			parseReleaseLimits(config, includedArchives, excludedArchives,
+					includedCodenames, excludedCodenames);
 		}
 
 		smatch m;
-		FORIT(directOptionIt, directOptions)
+		for (const string& directOption: directOptions)
 		{
 			static const sregex optionRegex = sregex::compile("(.*?)=(.*)");
-			const string& directOption = *directOptionIt;
 			if (!regex_match(directOption, m, optionRegex))
 			{
-				fatal("invalid option syntax in '%s' (right is '<option>=<value>')", directOption.c_str());
+				fatal2(__("invalid option syntax in '%s' (right is '<option>=<value>')"), directOption);
 			}
 			string key = m[1];
 			string value = m[2];
@@ -134,22 +180,22 @@ string parseCommonOptions(int argc, char** argv, shared_ptr< Config > config, ve
 			if (regex_match(key, m, listOptionNameRegex))
 			{
 				// this is list option
-				config->setList(m[1], value);
+				config.setList(m[1], value);
 			}
 			else
 			{
 				// regular option
-				config->setScalar(key, value);
+				config.setScalar(key, value);
 			}
 		}
 	}
 	catch (const bpo::error& e)
 	{
-		fatal("failed to parse command-line options: %s", e.what());
+		fatal2(__("failed to parse command-line options: %s"), e.what());
 	}
 	catch (Exception&)
 	{
-		fatal("error while processing command-line options");
+		fatal2(__("error while processing command-line options"));
 	}
 	return command;
 }
@@ -178,11 +224,11 @@ bpo::variables_map parseOptions(const Context& context, bpo::options_description
 	}
 	catch (const bpo::unknown_option& e)
 	{
-		fatal("unknown option '%s'", e.get_option_name().c_str());
+		fatal2(__("unknown option '%s'"), e.get_option_name());
 	}
 	catch (const bpo::error& e)
 	{
-		fatal("failed to parse options: %s", e.what());
+		fatal2(__("failed to parse command-line options: %s"), e.what());
 	}
 	bpo::notify(variablesMap);
 
@@ -208,6 +254,7 @@ std::function< int (Context&) > getHandler(const string& command)
 		{ "safe-upgrade", [](Context& c) -> int { return managePackages(c, ManagePackages::SafeUpgrade); } },
 		{ "full-upgrade", [](Context& c) -> int { return managePackages(c, ManagePackages::FullUpgrade); } },
 		{ "reinstall", [](Context& c) -> int { return managePackages(c, ManagePackages::Reinstall); } },
+		{ "iii", [](Context& c) -> int { return managePackages(c, ManagePackages::InstallIfInstalled); } },
 		{ "satisfy", [](Context& c) -> int { return managePackages(c, ManagePackages::Satisfy); } },
 		{ "build-dep", [](Context& c) -> int { return managePackages(c, ManagePackages::BuildDepends); } },
 		{ "dist-upgrade", &distUpgrade },
@@ -228,7 +275,7 @@ std::function< int (Context&) > getHandler(const string& command)
 	auto it = handlerMap.find(command);
 	if (it == handlerMap.end())
 	{
-		fatal("unrecognized command '%s'", command.c_str());
+		fatal2(__("unrecognized command '%s'"), command);
 	}
 	return it->second;
 }
@@ -238,24 +285,24 @@ void checkNoExtraArguments(const vector< string >& arguments)
 	if (!arguments.empty())
 	{
 		auto argumentsString = join(" ", arguments);
-		warn("extra arguments '%s' are not processed", argumentsString.c_str());
+		warn2(__("extra arguments '%s' are not processed"), argumentsString);
 	}
 }
 
-void handleQuietOption(const shared_ptr< Config >& config)
+void handleQuietOption(const Config& config)
 {
-	if (config->getBool("quiet"))
+	if (config.getBool("quiet"))
 	{
 		if (!freopen("/dev/null", "w", stdout))
 		{
-			fatal("unable to redirect standard output to '/dev/null': EEE");
+			fatal2e(__("unable to redirect standard output to '/dev/null'"));
 		}
 	}
 }
 
-shared_ptr< Progress > getDownloadProgress(const shared_ptr< const Config >& config)
+shared_ptr< Progress > getDownloadProgress(const Config& config)
 {
-	return shared_ptr< Progress >(config->getBool("quiet") ? new Progress : new ConsoleProgress);
+	return shared_ptr< Progress >(config.getBool("quiet") ? new Progress : new ConsoleProgress);
 }
 
 shared_ptr< Config > Context::getConfig()
@@ -268,7 +315,7 @@ shared_ptr< Config > Context::getConfig()
 		}
 		catch (Exception&)
 		{
-			fatal("error while loading config");
+			fatal2(__("error while loading the configuration"));
 		}
 	}
 	return __config;
@@ -296,7 +343,7 @@ shared_ptr< const Cache > Context::getCache(
 		}
 		catch (Exception&)
 		{
-			fatal("error while creating package cache");
+			fatal2(__("error while creating the package cache"));
 		}
 	}
 

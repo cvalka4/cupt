@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -50,10 +50,14 @@ int search(Context& context)
 	{
 		config->setScalar("apt::cache::namesonly", "yes");
 	}
+	if (!shellMode && config->getBool("apt::cache::namesonly"))
+	{
+		BinaryVersion::parseInfoOnly = false;
+	}
 
 	if (patterns.empty())
 	{
-		fatal("no search patterns specified");
+		fatal2(__("no search patterns specified"));
 	}
 
 	auto cache = context.getCache(/* source */ false, /* binary */ variables.count("installed-only") == 0,
@@ -73,13 +77,14 @@ int search(Context& context)
 		}
 		catch (regex_error&)
 		{
-			fatal("regular expression '%s' is not valid", pattern.c_str());
+			fatal2(__("invalid regular expression '%s'"), pattern);
 		}
 	});
 
 	smatch m;
 
 	vector< string > packageNames = cache->getBinaryPackageNames();
+	std::sort(packageNames.begin(), packageNames.end());
 	if (config->getBool("apt::cache::namesonly"))
 	{
 		// search only in package names
@@ -108,50 +113,41 @@ int search(Context& context)
 			const string& packageName = *packageNameIt;
 
 			auto package = cache->getBinaryPackage(packageName);
-			bool matched = true;
-			shared_ptr< const BinaryVersion > version;
+			auto versions = package->getVersions();
 
-			FORIT(regexIt, regexes)
+			set< string > printedShortDescriptions;
+			for (const auto& v: versions)
 			{
-				const sregex& regex = *regexIt;
-				if (regex_search(packageName, m, regex))
+				bool matched = true;
+
+				auto descriptions = cache->getLocalizedDescriptions(v);
+				const string& shortDescription = descriptions.first.empty() ? v->shortDescription : descriptions.first;
+				const string& longDescription = descriptions.second.empty() ? v->longDescription : descriptions.second;
+
+				FORIT(regexIt, regexes)
 				{
-					continue;
-				}
-				else
-				{
-					auto versions = package->getVersions();
-					auto versionCount = versions.size();
-					for (size_t i = 0; i < versionCount; ++i)
+					const sregex& regex = *regexIt;
+					if (regex_search(packageName, m, regex))
 					{
-						shared_ptr< const BinaryVersion >& v = versions[i];
-						if (regex_search(v->shortDescription, m, regex) || regex_search(v->longDescription, m, regex))
+						continue;
+					}
+					else
+					{
+						if (regex_search(shortDescription, m, regex) || regex_search(longDescription, m, regex))
 						{
-							version = v;
-							goto next_regex;
+							continue;
 						}
 					}
+					matched = false;
+					break;
 				}
-				matched = false;
-				break;
 
-				next_regex:
-				;
-			}
-
-			if (matched)
-			{
-				if (version)
+				if (matched && printedShortDescriptions.insert(shortDescription).second)
 				{
-					cout << packageName << " - " << version->shortDescription;
+					cout << packageName << " - " << shortDescription << endl;
 				}
-				else
-				{
-					cout << packageName;
-				}
-				cout << endl;
 			}
-		};
+		}
 	}
 
 	return 0;

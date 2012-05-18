@@ -26,21 +26,47 @@ namespace internal {
 namespace cachefiles {
 
 typedef Cache::IndexEntry IndexEntry;
+struct FileDownloadRecord
+{
+	string uri;
+	uint32_t size;
+	HashSums hashSums;
+};
 
 string getPathOfIndexList(const Config&, const IndexEntry&);
 string getPathOfReleaseList(const Config&, const IndexEntry&);
 string getPathOfExtendedStates(const Config&);
 
 string getDownloadUriOfReleaseList(const IndexEntry&);
-vector< Cache::IndexDownloadRecord > getDownloadInfoOfIndexList(
+vector< FileDownloadRecord > getDownloadInfoOfIndexList(
 		const Config&, const IndexEntry&);
 
-vector< string > getPathsOfLocalizedDescriptions(const Config&, const IndexEntry& entry);
-vector< Cache::LocalizationDownloadRecord > getDownloadInfoOfLocalizedDescriptions(
+vector< pair< string, string > > getPathsOfLocalizedDescriptions(
+		const Config&, const IndexEntry& entry);
+
+vector< FileDownloadRecord > getDownloadInfoOfLocalizationIndex(
+		const Config&, const IndexEntry&);
+struct LocalizationDownloadRecord2
+{
+	string filePart;
+	string localPath;
+};
+// TODO: remove when oldstable >> wheezy
+vector< LocalizationDownloadRecord2 > getDownloadInfoOfLocalizedDescriptions2(
 		const Config&, const IndexEntry&);
 
-bool verifySignature(const Config&, const string& releaseFilePath);
-shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config&, const string& path);
+struct LocalizationDownloadRecord3
+{
+	string localPath;
+	string language;
+	vector< FileDownloadRecord > fileDownloadRecords;
+};
+vector< LocalizationDownloadRecord3 > getDownloadInfoOfLocalizedDescriptions3(
+		const Config&, const IndexEntry&);
+
+bool verifySignature(const Config&, const string& path, const string& alias);
+shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config&,
+		const string& path, const string& alias);
 
 }
 }

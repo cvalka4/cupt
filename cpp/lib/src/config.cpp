@@ -92,22 +92,27 @@ void ConfigImpl::initializeVariables()
 		{ "gpgv::trustedkeyring", "/var/lib/cupt/trusted.gpg" },
 		{ "quiet", "0" }, // bool, '0' instead of 'no' for apt-listchanges (#604130)
 
-		// unused APT vars
-		{ "apt::cache-limit", "0" },
-		{ "apt::get::show-upgraded", "no" },
-		{ "apt::get::build-dep-automatic", "yes" },
-		{ "acquire::pdiffs", "yes" },
-		{ "dir::log", "var/log/apt" },
-		{ "dir::log::history", "history.log" },
-		{ "dir::log::terminal", "term.log" },
-
 		// Cupt vars
+		{ "cupt::cache::limit-releases::by-archive::type", "none" },
+		{ "cupt::cache::limit-releases::by-codename::type", "none" },
 		{ "cupt::cache::pin::addendums::downgrade", "-10000" },
 		{ "cupt::cache::pin::addendums::hold", "1000000" },
 		{ "cupt::cache::pin::addendums::not-automatic", "-4000" },
+		{ "cupt::cache::pin::addendums::but-automatic-upgrades", "4200" },
 		{ "cupt::cache::release-file-expiration::ignore", "no" },
 		{ "cupt::console::allow-untrusted", "no" },
 		{ "cupt::console::assume-yes", "no" },
+		{ "cupt::console::actions-preview::show-archives", "no" },
+		{ "cupt::console::actions-preview::show-codenames", "no" },
+		{ "cupt::console::actions-preview::show-components", "no" },
+		{ "cupt::console::actions-preview::show-not-preferred", "for-upgrades" },
+		{ "cupt::console::actions-preview::show-details", "yes" },
+		{ "cupt::console::actions-preview::show-reasons", "no" },
+		{ "cupt::console::actions-preview::show-size-changes", "no" },
+		{ "cupt::console::actions-preview::show-summary", "yes" },
+		{ "cupt::console::actions-preview::show-vendors", "no" },
+		{ "cupt::console::actions-preview::show-versions", "no" },
+		{ "cupt::console::use-colors", "no" },
 		{ "cupt::directory", "/" },
 		{ "cupt::directory::configuration", "etc/cupt" },
 		{ "cupt::directory::configuration::main", "cupt.conf" },
@@ -132,6 +137,7 @@ void ConfigImpl::initializeVariables()
 		{ "cupt::downloader::protocols::https::methods::wget::priority", "80" },
 		{ "cupt::downloader::protocols::http::methods::wget::priority", "80" },
 		{ "cupt::downloader::protocols::ftp::methods::wget::priority", "80" },
+		{ "cupt::languages::indexes", "environment" },
 		{ "cupt::update::check-release-files", "yes" },
 		{ "cupt::update::compression-types::gz::priority", "100" },
 		{ "cupt::update::compression-types::bz2::priority", "100" },
@@ -149,18 +155,19 @@ void ConfigImpl::initializeVariables()
 		{ "cupt::resolver::synchronize-by-source-versions", "none" },
 		{ "cupt::resolver::track-reasons", "no" },
 		{ "cupt::resolver::type", "fair" },
-		{ "cupt::resolver::score::new", "-300" },
-		{ "cupt::resolver::score::removal", "-500" },
+		{ "cupt::resolver::score::new", "-5" },
+		{ "cupt::resolver::score::removal", "-1800" },
+		{ "cupt::resolver::score::removal-of-autoinstalled", "1200" },
 		{ "cupt::resolver::score::removal-of-essential", "-200000" },
 		{ "cupt::resolver::score::upgrade", "100" },
 		{ "cupt::resolver::score::downgrade", "-800" },
-		{ "cupt::resolver::score::position-penalty", "-20" },
-		{ "cupt::resolver::score::quality-adjustment", "0" },
+		{ "cupt::resolver::score::position-penalty", "-2" },
+		{ "cupt::resolver::score::quality-adjustment", "40" },
 		{ "cupt::resolver::score::unsatisfied-recommends", "-240" },
 		{ "cupt::resolver::score::unsatisfied-suggests", "-60" },
 		{ "cupt::resolver::score::failed-synchronization", "-80" },
 		{ "cupt::worker::archives-space-limit", "0" },
-		{ "cupt::worker::defer-triggers", "no" },
+		{ "cupt::worker::defer-triggers", "auto" },
 		{ "cupt::worker::download-only", "no" },
 		{ "cupt::worker::log", "yes" },
 		{ "cupt::worker::log::levels::metadata", "1" },
@@ -199,16 +206,6 @@ void ConfigImpl::initializeVariables()
 		"dpkg::tools::options::*",
 		"dpkg::tools::options::*::*",
 
-		// unused APT vars
-		"acquire::cdrom::*",
-		"acquire::compressiontypes::*",
-		"apt::archives::*",
-		"apt::periodic::*",
-		"aptlistbugs::*",
-		"unattended-upgrade::*",
-		"aptitude::*",
-		"dselect::*",
-
 		// used Cupt vars
 		"cupt::downloader::protocols::*::priority",
 		"cupt::downloader::protocols::*::methods",
@@ -227,18 +224,16 @@ void ConfigImpl::initializeVariables()
 		{ "dpkg::pre-invoke", vector< string > {} },
 		{ "dpkg::post-invoke", vector< string > {} },
 
-		// unused APT vars
-		{ "rpm::pre-invoke", vector< string > {} },
-		{ "rpm::post-invoke", vector< string > {} },
-		{ "apt::never-markauto-sections", vector< string > {} },
-
 		// Cupt vars
+		{ "cupt::cache::limit-releases::by-archive", vector< string > {} },
+		{ "cupt::cache::limit-releases::by-codename", vector< string > {} },
 		{ "cupt::downloader::protocols::file::methods", vector< string > { "file" } },
 		{ "cupt::downloader::protocols::copy::methods", vector< string > { "file" } },
 		{ "cupt::downloader::protocols::debdelta::methods", vector< string > { "debdelta" } },
 		{ "cupt::downloader::protocols::https::methods", vector< string > { "curl", "wget" } },
 		{ "cupt::downloader::protocols::http::methods", vector< string > { "curl", "wget" } },
 		{ "cupt::downloader::protocols::ftp::methods", vector< string > { "curl", "wget" } },
+		{ "cupt::resolver::no-autoremove-if-rdepends-exist", {} },
 	};
 }
 
@@ -265,7 +260,7 @@ void ConfigImpl::readConfigs(Config* config)
 	{
 		if (value.size() < 2)
 		{
-			fatal("internal error: unquoted simple value '%s'", value.c_str());
+			fatal2i("unquoted simple value '%s'", value);
 		}
 		return string(value.begin() + 1, value.end() - 1);
 	};
@@ -336,7 +331,7 @@ void ConfigImpl::readConfigs(Config* config)
 			}
 			catch (Exception&)
 			{
-				warn("skipped configuration file '%s'", configFileIt->c_str());
+				warn2(__("skipped the configuration file '%s'"), *configFileIt);
 			}
 		}
 	}
@@ -350,7 +345,7 @@ static string qx(const string& shellCommand)
 	File file(shellCommand, "pr", openError); // reading from pipe
 	if (!openError.empty())
 	{
-		fatal("unable to open pipe '%s': %s", shellCommand.c_str(), openError.c_str());
+		fatal2(__("unable to open the pipe '%s': %s"), shellCommand, openError);
 	}
 	string result;
 	string block;
@@ -427,7 +422,7 @@ string Config::getString(const string& optionName) const
 	}
 	else
 	{
-		fatal("an attempt to get wrong scalar option '%s'", optionName.c_str());
+		fatal2(__("an attempt to get the invalid scalar option '%s'"), optionName);
 	}
 	__builtin_unreachable();
 }
@@ -483,7 +478,7 @@ ssize_t Config::getInteger(const string& optionName) const
 		}
 		catch (boost::bad_lexical_cast&)
 		{
-			fatal("unable to convert '%s' to number", source.c_str());
+			fatal2(__("unable to convert '%s' to a number"), source);
 		}
 		return result; // we'll never return default value here
 	}
@@ -502,9 +497,14 @@ vector< string > Config::getList(const string& optionName) const
 	}
 	else
 	{
-		fatal("an attempt to get wrong list option '%s'", optionName.c_str());
+		fatal2(__("an attempt to get the invalid list option '%s'"), optionName);
 	}
 	__builtin_unreachable();
+}
+
+bool __is_cupt_option(const string& optionName)
+{
+	return optionName.size() >= 6 && optionName.compare(0, 6, "cupt::") == 0;
 }
 
 void Config::setScalar(const string& optionName, const string& value)
@@ -532,7 +532,10 @@ void Config::setScalar(const string& optionName, const string& value)
 	}
 	else
 	{
-		warn("an attempt to set wrong scalar option '%s'", optionName.c_str());
+		if (__is_cupt_option(optionName))
+		{
+			warn2(__("an attempt to set the invalid scalar option '%s'"), optionName);
+		}
 	}
 }
 
@@ -550,7 +553,10 @@ void Config::setList(const string& optionName, const string& value)
 	}
 	else
 	{
-		warn("an attempt to set wrong list option '%s'", optionName.c_str());
+		if (__is_cupt_option(optionName))
+		{
+			warn2(__("an attempt to set the invalid list option '%s'"), optionName);
+		}
 	}
 }
 

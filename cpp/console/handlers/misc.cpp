@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -60,7 +60,7 @@ int showBinaryVersions(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal("no binary package expressions specified");
+		fatal2(__("no binary package expressions specified"));
 	}
 
 	if (!shellMode)
@@ -99,10 +99,10 @@ int showBinaryVersions(Context& context)
 	for (size_t i = 0; i < arguments.size(); ++i)
 	{
 		const string& packageExpression = arguments[i];
-		vector< shared_ptr< const BinaryVersion > > versions;
+		vector< const BinaryVersion* > versions;
 		if (config->getBool("apt::cache::allversions"))
 		{
-			versions = getBinaryPackage(cache, packageExpression)->getVersions();
+			versions = selectAllBinaryVersionsWildcarded(cache, packageExpression);
 		}
 		else
 		{
@@ -123,17 +123,15 @@ int showBinaryVersions(Context& context)
 			}
 		}
 
-		FORIT(it, versions)
+		for (const auto& version: versions)
 		{
-			const shared_ptr< const BinaryVersion >& version = *it;
-
 			auto packageName = version->packageName;
 			p(__("Package"), packageName);
 			p(__("Version"), version->versionString);
 			if (version->isInstalled())
 			{
 				auto installedInfo = cache->getSystemState()->getInstalledInfo(packageName);
-				string status = system::State::InstalledRecord::Status::strings[installedInfo->status];
+				string status = __(system::State::InstalledRecord::Status::strings[installedInfo->status].c_str());
 				if (installedInfo->want == system::State::InstalledRecord::Want::Hold)
 				{
 					status += string(" (") + __("on hold") + ")";
@@ -155,7 +153,7 @@ int showBinaryVersions(Context& context)
 			{
 				p(__("Essential"), __("yes"));
 			}
-			p(__("Priority"), Version::Priorities::strings[version->priority]);
+			p(__("Priority"), __(Version::Priorities::strings[version->priority].c_str()));
 			p(__("Section"), version->section);
 			if (version->file.size)
 			{
@@ -174,7 +172,7 @@ int showBinaryVersions(Context& context)
 			}
 			for (size_t i = 0; i < BinaryVersion::RelationTypes::Count; ++i)
 			{
-				p(BinaryVersion::RelationTypes::strings[i], version->relations[i].toString());
+				p(__(BinaryVersion::RelationTypes::strings[i].c_str()), version->relations[i].toString());
 			}
 			p(__("Provides"), join(", ", version->provides));
 			auto reverseProvides = getReverseProvides(packageName);
@@ -215,6 +213,10 @@ int showBinaryVersions(Context& context)
 			{
 				FORIT(it, (*(version->others)))
 				{
+					if (it->first == "Description-md5")
+					{
+						continue;
+					}
 					p(it->first, it->second);
 				}
 			}
@@ -237,7 +239,7 @@ int showSourceVersions(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal("no source package expressions specified");
+		fatal2(__("no source package expressions specified"));
 	}
 
 	if (!shellMode)
@@ -251,25 +253,23 @@ int showSourceVersions(Context& context)
 	for (size_t i = 0; i < arguments.size(); ++i)
 	{
 		const string& packageExpression = arguments[i];
-		vector< shared_ptr< const SourceVersion > > versions;
+		vector< const SourceVersion* > versions;
 		if (config->getBool("apt::cache::allversions"))
 		{
-			versions = getSourcePackage(cache, packageExpression)->getVersions();
+			versions = selectAllSourceVersionsWildcarded(cache, packageExpression);
 		}
 		else
 		{
 			versions = selectSourceVersionsWildcarded(cache, packageExpression);
 		}
 
-		FORIT(it, versions)
+		for (const auto& version: versions)
 		{
-			const shared_ptr< const SourceVersion >& version = *it;
-
 			auto packageName = version->packageName;
 			p(__("Package"), packageName);
 			p(__("Binary"), join(", ", version->binaryPackageNames));
 			p(__("Version"), version->versionString);
-			p(__("Priority"), Version::Priorities::strings[version->priority]);
+			p(__("Priority"), __(Version::Priorities::strings[version->priority].c_str()));
 			p(__("Section"), version->section);
 			p(__("Maintainer"), version->maintainer);
 			if (!version->uploaders.empty())
@@ -287,17 +287,14 @@ int showSourceVersions(Context& context)
 			}
 			for (size_t i = 0; i < SourceVersion::RelationTypes::Count; ++i)
 			{
-				p(SourceVersion::RelationTypes::strings[i], version->relations[i].toString());
+				p(__(SourceVersion::RelationTypes::strings[i].c_str()), version->relations[i].toString());
 			}
 			{ // download info
 				for (size_t i = 0; i < SourceVersion::FileParts::Count; ++i)
 				{
-					const vector< Version::FileRecord >& fileRecords = version->files[i];
-					FORIT(fileRecordIt, fileRecords)
+					for (const Version::FileRecord& fileRecord: version->files[i])
 					{
-						const Version::FileRecord& fileRecord = *fileRecordIt;
-
-						cout << SourceVersion::FileParts::strings[i] << ':' << endl;
+						cout << __(SourceVersion::FileParts::strings[i].c_str()) << ':' << endl;
 						p(string("  ") + __("Size"), humanReadableSizeString(fileRecord.size));
 						p("  MD5", fileRecord.hashSums[HashSums::MD5]);
 						p("  SHA1", fileRecord.hashSums[HashSums::SHA1]);
@@ -344,18 +341,18 @@ int showRelations(Context& context, bool reverse)
 
 	if (arguments.empty())
 	{
-		fatal("no binary package expressions specified");
+		fatal2(__("no binary package expressions specified"));
 	}
 
 	if (reverse)
 	{
-		Package::memoize = true;
+		Cache::memoize = true;
 	}
 
 	auto cache = context.getCache(/* source */ false, /* binary */ variables.count("installed-only") == 0,
 			/* installed */ true);
 
-	queue< shared_ptr< const BinaryVersion > > versions;
+	queue< const BinaryVersion* > versions;
 	FORIT(it, arguments)
 	{
 		auto selectedVersions = selectBinaryVersionsWildcarded(cache, *it);
@@ -378,21 +375,18 @@ int showRelations(Context& context, bool reverse)
 	}
 
 	// don't output the same version more than one time
-	set< shared_ptr< const BinaryVersion >, PointerLess< const BinaryVersion > > processedVersions;
+	set< const BinaryVersion* > processedVersions;
 
 	// used only by rdepends
 	unordered_map< string, set< string > > reverseDependsIndex;
 	if (reverse)
 	{
-		auto packageNames = cache->getBinaryPackageNames();
-		FORIT(packageNameIt, packageNames)
+		for (const string& packageName: cache->getBinaryPackageNames())
 		{
-			const string& packageName = *packageNameIt;
 			auto package = cache->getBinaryPackage(packageName);
 			auto versions = package->getVersions();
-			FORIT(versionIt, versions)
+			for (const auto& version: versions)
 			{
-				const shared_ptr< const BinaryVersion >& version = *versionIt;
 				FORIT(relationGroupIt, relationGroups)
 				{
 					const RelationLine& relationLine = version->relations[*relationGroupIt];
@@ -430,15 +424,13 @@ int showRelations(Context& context, bool reverse)
 
 		FORIT(relationGroupIt, relationGroups)
 		{
-			const string& caption = BinaryVersion::RelationTypes::strings[*relationGroupIt];
+			const string& caption = __(BinaryVersion::RelationTypes::strings[*relationGroupIt].c_str());
 
 			if (!reverse)
 			{
 				// just plain normal dependencies
-				FORIT(relationExpressionIt, version->relations[*relationGroupIt])
+				for (const auto& relationExpression: version->relations[*relationGroupIt])
 				{
-					const RelationExpression& relationExpression = *relationExpressionIt;
-
 					cout << "  " << caption << ": " << relationExpression.toString() << endl;
 					if (recurse)
 					{
@@ -456,16 +448,16 @@ int showRelations(Context& context, bool reverse)
 							// push the version with the maximum pin
 							if (!satisfyingVersions.empty())
 							{
-								auto candidateVersion = satisfyingVersions[0];
+								auto preferredVersion = satisfyingVersions[0];
 								for (auto satisfyingVersionIt = satisfyingVersions.begin() + 1;
 										satisfyingVersionIt != satisfyingVersions.end(); ++satisfyingVersionIt)
 								{
-									if (cache->getPin(*satisfyingVersionIt) > cache->getPin(candidateVersion))
+									if (cache->getPin(*satisfyingVersionIt) > cache->getPin(preferredVersion))
 									{
-										candidateVersion = *satisfyingVersionIt;
+										preferredVersion = *satisfyingVersionIt;
 									}
 								}
-								versions.push(candidateVersion);
+								versions.push(preferredVersion);
 							}
 						}
 					}
@@ -483,16 +475,14 @@ int showRelations(Context& context, bool reverse)
 						auto packageCandidate = cache->getBinaryPackage(*packageCandidateNameIt);
 						auto candidateVersions = packageCandidate->getVersions();
 
-						FORIT(candidateVersionIt, candidateVersions)
+						for (const auto& candidateVersion: candidateVersions)
 						{
-							const shared_ptr< const BinaryVersion > candidateVersion = *candidateVersionIt;
 							FORIT(relationExpressionIt, candidateVersion->relations[*relationGroupIt])
 							{
 								auto satisfyingVersions = cache->getSatisfyingVersions(*relationExpressionIt);
-								FORIT(satisfyingVersionIt, satisfyingVersions)
+								for (const auto& satisfyingVersion: satisfyingVersions)
 								{
-									const shared_ptr< const BinaryVersion >& satisfyingVersion = *satisfyingVersionIt;
-									if (*satisfyingVersion == *version)
+									if (satisfyingVersion == version)
 									{
 										// positive result
 										cout << "  " << __("Reverse-") << caption << ": "
@@ -576,9 +566,15 @@ int policy(Context& context, bool source)
 	}
 
 	vector< string > arguments;
-	bpo::options_description noOptions("");
+	bpo::options_description options("");
+	options.add_options()
+		("show-dates", "");
 
-	parseOptions(context, noOptions, arguments);
+	auto variables = parseOptions(context, options, arguments);
+	if (!arguments.empty() && variables.count("show-dates"))
+	{
+		fatal2(__("the option '--show-dates' can be used only with no package names supplied"));
+	}
 
 	auto cache = context.getCache(/* source */ source, /* binary */ !source,
 			/* installed */ !source);
@@ -590,13 +586,13 @@ int policy(Context& context, bool source)
 		FORIT(packageNameIt, arguments)
 		{
 			const string& packageName = *packageNameIt;
-			shared_ptr< const Package > package = (!source ?
-					shared_ptr< const Package >(getBinaryPackage(cache, packageName)) :
-					shared_ptr< const Package >(getSourcePackage(cache, packageName)));
+			const Package* package = (!source ?
+					(const Package*)getBinaryPackage(cache, packageName) :
+					(const Package*)getSourcePackage(cache, packageName));
 			auto policyVersion = cache->getPolicyVersion(package);
 			if (!policyVersion)
 			{
-				fatal("no versions available for package '%s'", packageName.c_str());
+				fatal2(__("no versions available for the package '%s'"), packageName);
 			}
 
 			cout << packageName << ':' << endl;
@@ -604,10 +600,10 @@ int policy(Context& context, bool source)
 			string installedVersionString;
 			if (!source)
 			{
-				auto binaryPackage = dynamic_pointer_cast< const BinaryPackage >(package);
+				auto binaryPackage = dynamic_cast< const BinaryPackage* >(package);
 				if (!binaryPackage)
 				{
-					fatal("internal error: binary package expected");
+					fatal2i("binary package expected");
 				}
 				auto installedVersion = binaryPackage->getInstalledVersion();
 				if (installedVersion)
@@ -620,14 +616,14 @@ int policy(Context& context, bool source)
 						<< endl;
 			}
 
-			cout << "  " << __("Candidate") << ": " << policyVersion->versionString << endl;
+			cout << "  " << __("Preferred") << ": " << policyVersion->versionString << endl;
 			cout << "  " << __("Version table") << ':' << endl;
 
 			auto pinnedVersions = cache->getSortedPinnedVersions(package);
 
 			FORIT(pinnedVersionIt, pinnedVersions)
 			{
-				const shared_ptr< const Version >& version = pinnedVersionIt->version;
+				const auto& version = pinnedVersionIt->version;
 				auto pin = pinnedVersionIt->pin;
 
 				if (version->versionString == installedVersionString)
@@ -659,7 +655,8 @@ int policy(Context& context, bool source)
 	}
 	else
 	{
-		auto sayReleaseInfo = [&config](const shared_ptr< const ReleaseInfo >& releaseInfo)
+		auto showDates = variables.count("show-dates");
+		auto sayReleaseInfo = [&config, &showDates](const shared_ptr< const ReleaseInfo >& releaseInfo)
 		{
 			string origin = releaseInfo->baseUri;
 			if (origin.empty())
@@ -675,6 +672,19 @@ int policy(Context& context, bool source)
 			cout << ",c=" << component;
 			cout << ",v=" << releaseInfo->version;
 			cout << ",n=" << releaseInfo->codename;
+			if (showDates && !releaseInfo->baseUri.empty())
+			{
+				cout << format2(" (%s: %s, ", __("published"), releaseInfo->date);
+				if (releaseInfo->validUntilDate.empty())
+				{
+					cout << __("does not expire");
+				}
+				else
+				{
+					cout << format2("%s: %s", __("expires"), releaseInfo->validUntilDate);
+				}
+				cout << ")";
+			}
 			cout << endl;
 		};
 
@@ -752,7 +762,7 @@ int findDependencyChain(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal("no binary packages specified");
+		fatal2(__("no binary package expressions specified"));
 	}
 
 	bool installedOnly = variables.count("installed-only") || (arguments.size() == 1);
@@ -764,16 +774,16 @@ int findDependencyChain(Context& context)
 	arguments.erase(arguments.end() - 1);
 	auto leafVersion = selectBinaryVersion(cache, leafPackageExpression, true);
 
-	queue< shared_ptr< const BinaryVersion > > versions;
+	queue< const BinaryVersion* > versions;
 	struct PathEntry
 	{
-		shared_ptr< const BinaryVersion > version;
+		const BinaryVersion* version;
 		BinaryVersion::RelationTypes::Type dependencyType;
-		RelationExpression relationExpression;
+		const RelationExpression* relationExpressionPtr;
 	};
-	map< shared_ptr< const BinaryVersion >, PathEntry, PointerLess< const BinaryVersion > > links;
+	map< const BinaryVersion*, PathEntry  > links;
 
-	auto addStartingVersion = [&versions, &links](const shared_ptr< const BinaryVersion >& version)
+	auto addStartingVersion = [&versions, &links](const BinaryVersion* version)
 	{
 		versions.push(version);
 		links[version]; // create empty PathEntry for version
@@ -795,9 +805,8 @@ int findDependencyChain(Context& context)
 	{
 		// the whole system
 		auto installedVersions = cache->getInstalledVersions();
-		FORIT(installedVersionIt, installedVersions)
+		for (const auto& installedVersion: installedVersions)
 		{
-			const shared_ptr< const BinaryVersion >& installedVersion = *installedVersionIt;
 			if (!cache->isAutomaticallyInstalled(installedVersion->packageName))
 			{
 				addStartingVersion(installedVersion);
@@ -824,11 +833,11 @@ int findDependencyChain(Context& context)
 		auto version = versions.front();
 		versions.pop();
 
-		if (*version == *leafVersion)
+		if (version == leafVersion)
 		{
 			// we found a path, re-walk it
 			stack< PathEntry > path;
-			shared_ptr< const BinaryVersion > currentVersion = version;
+			const BinaryVersion* currentVersion = version;
 
 			decltype(links.find(currentVersion)) it;
 			while ((it = links.find(currentVersion)), it->second.version)
@@ -841,11 +850,10 @@ int findDependencyChain(Context& context)
 			{
 				PathEntry pathEntry = path.top();
 				path.pop();
-				cout << sf("%s %s: %s: %s",
-						pathEntry.version->packageName.c_str(),
-						pathEntry.version->versionString.c_str(),
-						BinaryVersion::RelationTypes::strings[pathEntry.dependencyType].c_str(),
-						pathEntry.relationExpression.toString().c_str()) << endl;
+				cout << format2("%s %s: %s: %s",
+						pathEntry.version->packageName, pathEntry.version->versionString,
+						__(BinaryVersion::RelationTypes::strings[pathEntry.dependencyType].c_str()),
+						pathEntry.relationExpressionPtr->toString()) << endl;
 			}
 			break;
 		}
@@ -858,19 +866,17 @@ int findDependencyChain(Context& context)
 			{
 				// insert recursive depends into queue
 				auto satisfyingVersions = cache->getSatisfyingVersions(*relationExpressionIt);
-				FORIT(newVersionIt, satisfyingVersions)
+				for (const auto& newVersion: satisfyingVersions)
 				{
-					const shared_ptr< const BinaryVersion >& newVersion = *newVersionIt;
-
-					static const PathEntry dummyPathEntry;
-					auto insertResult = links.insert(make_pair(newVersion, dummyPathEntry));
+					auto insertResult = links.insert({ newVersion, PathEntry() });
 					if (insertResult.second)
 					{
 						// new element
 						PathEntry& newPathEntry = insertResult.first->second;
 						newPathEntry.version = version;
 						newPathEntry.dependencyType = dependencyType;
-						newPathEntry.relationExpression = *relationExpressionIt;
+						// the pointer is valid because .version is alive
+						newPathEntry.relationExpressionPtr = &*relationExpressionIt;
 
 						versions.push(newVersion);
 					}
@@ -890,7 +896,7 @@ int showScreenshotUris(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal("no binary package names specified");
+		fatal2(__("no binary package names specified"));
 	}
 
 	auto cache = context.getCache(false, true, true); // binary and installed
@@ -920,6 +926,8 @@ int tarMetadata(Context& context)
 	vector< string > pathList = {
 		config->getPath("dir::etc::main"),
 		config->getPath("dir::etc::parts"),
+		config->getPath("cupt::directory::configuration::main"),
+		config->getPath("cupt::directory::configuration::main-parts"),
 		config->getPath("dir::etc::sourcelist"),
 		config->getPath("dir::etc::sourceparts"),
 		config->getPath("dir::etc::preferences"),

@@ -91,7 +91,7 @@ struct CUPT_API Version
 	 * @return @c true if hash sums of all files in the version match hash sums
 	 * of all files in the @a other version, @c false otherwise
 	 */
-	virtual bool areHashesEqual(const shared_ptr< const Version >& other) const = 0;
+	virtual bool areHashesEqual(const Version* other) const = 0;
 
 	/// does version have at least one verified Source?
 	bool isVerified() const;
@@ -103,11 +103,6 @@ struct CUPT_API Version
 	 * Uses pair @ref packageName, @ref versionString for comparison
 	 */
 	bool operator<(const Version&) const;
-	/// equality operator
-	/**
-	 * Uses pair @ref packageName, @ref versionString for comparison
-	 */
-	bool operator==(const Version&) const;
 
 	/// enables parsing relation fields in versions, @c true by default
 	static bool parseRelations;

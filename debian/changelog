@@ -1,3 +1,453 @@
+cupt (2.6.0~) UNRELEASED; urgency=low
+
+  * console:
+    - Managing packages:
+      - The option 'cupt::resolver::track-reasons' does not correspond to the
+        console '--show-reasons' option anymore.
+  * lib:
+    - Removed deprecated functions 'fatal', 'warn', 'debug', 'simulate'.
+    - [API break] '__': now returns 'const char*' instead of 'string'.
+    - cache:
+      - [API break] Pointers to Package and Version objects are now persistent
+        and unique. Thus shared pointers to those objects are no more used in
+        public interfaces.
+      - [API break] PinnedVersion: removed explicit constructor.
+      - [API break] Removed deprecated methods and structures.
+    - cache/relation:
+      - [API break] ArchitecturedRelation, ArchitecturedRelationExpression:
+        constructor from string subrange is now explicit.
+    - config:
+      - Don't store unused APT variables anymore.
+      - New option 'cupt::console::actions-preview::show-reasons'.
+    - cache/version:
+      - [API break] 'operator==': removed, versions can be now compared by
+        pointers' values.
+  * debian:
+    - control:
+      - Bumped the library API version.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 08 Apr 2012 10:59:48 +0300
+
+cupt (2.5.4) unstable; urgency=low
+
+  * lib:
+    - system/resolvers/native:
+      - Fixed an internal error when a not installed package was considered
+        but then autoremoved (under certain conditions). This regression was
+        introduced in 2.5.0. Thanks to Karol Kozłowski for the report.
+        (Closes: #672693)
+    - download/methodfactory:
+      - [Jonathan Nieder] 'getDownloadMethodForUri': include the protocol to
+        the 'no download handlers' error message.
+  * po:
+    - Added Slovak translation by Ivan Masár. (Closes: #671793)
+  * debian:
+    - control:
+      - [Jonathan Nieder] Suggest installing a download method in the 'cupt'
+        package description. Thanks to Manuel A. Fernandez Montecelo for the
+        report. (Closes: #672804)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Tue, 15 May 2012 20:32:36 +0300
+
+cupt (2.5.3) unstable; urgency=low
+
+  * console:
+    - Enable message translations as early as possible. Enables translations
+      for for '--help' command. Thanks to Karol Kozłowski for the report.
+    - 'show', 'showsrc':
+      - Use localized priority strings.
+      - Use localized relation strings.
+    - 'show':
+      - Use localized installed state strings.
+    - 'showrc':
+      - Use localized source package part strings.
+    - 'depends', 'rdepends', 'why':
+      - Use localized binary relation strings.
+  * lib:
+    - system/resolvers/native:
+      - Stopped using unique_ptr<void>, fixing a small memory leak. This
+        regression was introduced in 2.0.0~alpha3.
+      - Fixed another small memory leak, introduced in 2.5.0.
+    - config:
+      - Added a support for the '/* ... */'-comments.
+  * po:
+    - Added Polish translation by Karol Kozłowski. (Closes: #671092)
+    - Added partial Danish translation by Joe Dalton. (Closes: #671119)
+    - getpot:
+      - Set 'report msgid bugs to' field to the development mailing list.
+  * doc:
+    - reference:
+      - Disable jquery-based search.
+  * debian:
+    - control:
+      - Added build-dependency on gettext.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 03 May 2012 22:54:26 +0300
+
+cupt (2.5.2) unstable; urgency=low
+
+  * lib:
+    - cache:
+      - Constructor: source index alias: fixed placing the square brackets
+        around the suffix "source".
+      - Constructor: parsing index localization files: support the old index
+        localization files scheme again. This regression was introduced in
+        2.5.0.
+      - Constructor: parsing index localization files: don't skip silently
+        the rest of the file if a distance between records is more than one
+        empty line. This regression was introduced in 2.0.0~alpha3.
+  * Grammar and style fixes for translatable messages by Justin B Rye.
+  * debian/control:
+    - Changed the maintainer address to 'cupt-devel@lists.alioth.debian.org'.
+    - Added myself to uploaders.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sat, 07 Apr 2012 12:24:38 +0300
+
+cupt (2.5.1) unstable; urgency=low
+
+  * lib:
+    - cache:
+      - Fixed the error, when the actions which need package descriptions
+        stopped to work when any needed Release file cannot be opened or
+        parsed. This regression was introduced in 2.5.0.
+        (Closes: #666762)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 01 Apr 2012 18:34:14 +0300
+
+cupt (2.5.0) unstable; urgency=low
+
+  * console:
+    - 'rdepends':
+      - Small speed-up by using more aggressive caching.
+    - Managing packages:
+      - Action preview prompt: moved auto-removed packages to a new
+        'no longer needed' section.
+      - Action summary: don't print zero-sized parts.
+  * lib:
+    - system/worker:
+      - Updating release and index data: use the information about Translation
+        files from Release files if provided.
+      - Support Translation diffs.
+    - download/manager:
+      - Avoid using new[]() in processing socket messages.
+      - Use std::queue instead of system pipe for the worker's internal
+        message queue.
+    - config:
+      - New option 'cupt::resolver::no-autoremove-if-rdepends-exist'.
+        (Closes: #658981)
+      - New option 'cupt::resolver::score::removal-of-autoinstalled'.
+      - Lowed a bit the default value of the option
+        'cupt::resolver::score::removal'.
+      - Parsing configuration files: fixed ignoring the incorrect syntax
+        before the end of file in some cases.
+      - Parsing configuration files: in the case of a syntax error print the
+        line number and character number instead of the part of context string.
+      - 'setScalar', 'setList': don't print warnings anymore for unknown
+        non-Cupt-specific options (those which names don't start with 'cupt::')
+    - download/progresses/console:
+      - Status line: leave the cursor at the end of line so anynchronous
+        warning and error messages are printed on the next line, not over the
+        status line.
+    - cache/package:
+      - When throwing away a duplicate version with different hash sums, show
+        also left origins in the warning message.
+    - system/resolvers/native:
+      - Score calculation: for removals of packages which are not manually
+        installed, apply also the 'removal-of-autoinstalled' score.
+        (Closes: #662027)
+      - Fixed the memory leak. It was introduced in 2.0.0~alpha4.
+      - Reverted skipping solutions if an auto-removed element is (partially)
+        sticked. It could introduce very long delays in the solution
+        calculations in some rare cases.
+    - cache:
+      - Constructor: don't parse release files more than once.
+      - Constructor: parsing release, index and localization files: use
+        an alias instead of the full path in the error and warning messages.
+      - Constructor: parsing index localization files: print an error when
+        the file exists but can't be opened.
+      - Parsing release files: don't warn anymore if the 'archive' or 'vendor'
+        fields are missing.
+    - Don't include a not exported header from cupt/common.hpp, making a
+      development binary package usable again. Fixes a regression since
+      2.3.0~rc1.
+    - Remove accidentally included 'using std::string' from a global namespace.
+      Fixes a regression since 2.3.0~rc1.
+  * downloadmethods:
+    - wget:
+      - Use threads instead of explicit fork()s.
+      - User-Agent now has a libcupt-specific suffix.
+    - curl:
+      - User-Agent now has a libcupt-specific suffix. (Closes: #663381)
+  * Improvements in the error and warning messages.
+  * debian:
+    - libcupt2-0.shlibs: added with an initial value of 2.3.0~rc1.
+    - shlibs.local: added as an alias to above.
+    - control:
+      - Bumped Standards-Version to 3.9.3, no changes needed.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sat, 31 Mar 2012 16:37:13 +0300
+
+cupt (2.4.1) unstable; urgency=medium
+
+  * console:
+    - Managing packages:
+      - Fixed possible spontaneous 'Enter a package expression' messages while
+        resolving problems when no solutions were found and no exception was
+        thrown. This regression was introduced in 2.0.0~rc1.
+  * lib:
+    - system/resolvers/native:
+      - Fixed throwing an exception when some solutions were found but all of
+        them were autorejected. This can happen only if some solutions were
+        dropped due to a solution count requirement (the option
+        'cupt::resolver::max-solution-count'). This regression was introduced
+        in 2.4.0 and also made the 'Enter a package expression' regression
+        above able to show itself.
+    - cache:
+      - Constructor: don't error out if an extended states file is not
+        present, print a warning instead. (Closes: #663382)
+      - Reading APT pin preferences: fixed incorrect line numbers in error
+        messages.
+    - system/worker:
+      - Create the main archives directory if it doesn't exist.
+      - 'setAutomaticallyInstalledFlag': create the directory chain (if needed)
+        for creating the extended states file.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 15 Mar 2012 20:22:15 +0200
+
+cupt (2.4.0) unstable; urgency=low
+
+  * Switched the compiler from g++ 4.5 to g++ 4.6.
+    - The compiler now can generate trivial move-constructors itself.
+      Patch by Jonathan Nieder. (Closes: #647142)
+  * console:
+    - 'policy', 'policysrc':
+      - New option '--show-dates'.
+    - 'show':
+      - Don't output 'Description-md5' field.
+    - New subcommand 'iii'.
+    - Actions preview:
+      - Don't show size changes for 'not preferred' group.
+      - Don't show reasons for 'not preferred' group.
+    - Managing packages:
+      - New option '--show-archives'.
+      - New option '--show-codenames'.
+      - New option '--show-components'.
+      - New option '--show-vendors'.
+    - 'search':
+      - Switch off processing index translations in 'names-only' mode.
+  * lib:
+    - config:
+      - The option 'cupt::resolver::score::position-penalty' now defaults to
+        -2 (was -20).
+      - Adjusted default values of options
+        'cupt::resolver::score::{new,removal,quality-adjustment}' for changes
+        in the score calculation (see below).
+      - New (and default from now on) option value 'auto' for the option
+        'cupt::worker::defer-triggers'.
+      - New option 'cupt::console::actions-preview::show-versions'.
+      - New option 'cupt::console::actions-preview::show-size-changes'.
+      - New option 'cupt::console::actions-preview::show-archives'.
+      - New option 'cupt::console::actions-preview::show-codenames'.
+      - New option 'cupt::console::actions-preview::show-components'.
+      - New option 'cupt::console::actions-preview::show-vendors'.
+    - system/resolvers/native:
+      - Use normalized version priority in score calculations.
+      - If a solution to a problem is an "unsatisfied" element, partially
+        stick all competing solution elements, not only preceding ones.
+      - Skip a solution if some element to auto-remove cannot be removed
+        due to being (partially) sticked. (Closes: #641473)
+      - Removing automatically installed packages: if several automatically
+        installed packages satisfy the relation, leave only first of them.
+    - system/worker:
+      - If the option 'cupt::worker::defer-triggers' is set to 'auto', check
+        for recent enough version of dpkg (1.16.1).
+    - cache:
+      - 'getLocalizedDescriptions': use new 'Description-md5' binary version
+        field if available. (Closes: #657872)
+      - Don't preprocess index localization files when Version::parseInfoOnly
+        variable is false.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 30 Jan 2012 21:37:15 +0200
+
+cupt (2.3.3) unstable; urgency=low
+
+  * console:
+    - 'tar-metadata': include also Cupt-specific configuration files.
+  * lib:
+    - system/worker:
+      - Generating dpkg package sequence: fixed non-propagating low-level
+        subactions to higher-level subgroups in some cases. This regression
+        was introduced in 2.2.0~rc1. Thanks to Jonathan Nieder for the report.
+        (Closes: #656566)
+  * doc:
+    - tutorial:
+      - Explicitly documented what infrastructure Cupt uses.
+  * debian:
+    - libcupt2-0.postrm:
+      - Remove '/var/lib/cupt' directory completely on 'purge'.
+        (Closes: #656457)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sat, 21 Jan 2012 12:43:56 +0200
+
+cupt (2.3.2) unstable; urgency=low
+
+  * console:
+    - 'show', 'showsrc': package name wildcards now work with '--all-versions'.
+      (Closes: #651889)
+  * lib:
+    - cache:
+      - Pin preferences: fixed 'origin' pin type support. (Closes: #651890)
+      - Pin preferences: print a more user-friently error message when pin
+        priority is not a valid integer. (Closes: #651894)
+      - Parsing Release files: use 'Version' field when it's present.
+        (Closes: #652379)
+  * doc:
+    - man/cupt.1:
+      - Documented the option '--show-not-preferred'. (Closes: #651888)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 19 Dec 2011 20:16:26 +0200
+
+cupt (2.3.1) unstable; urgency=low
+
+  * console:
+    - Managing packages:
+      - 'reinstall': always use and enforce the installed version.
+        (Closes: #650214)
+  * lib:
+    - cache:
+      - Fixed printing an error reason when could not open a release file
+        (a regression since 2.3.0~rc1).
+    - system/worker:
+      - 'getArchivesInfo': avoid using glob(3) which follows symlinks.
+        (Closes: #638327)
+      - Updating release and index data: cleaning obsolete files: avoid using
+        glob(3) which follows symlinks. (Closes: #650128)
+  * doc:
+    - man/cupt.1:
+      - Removed a documentation for option '--no-install-unpacked' which was
+        removed in 0.6.5. (Closes: #650126)
+    - tutorial:
+      - Fixed typos and misspellings found by A. Costa. (Closes: #650372)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 04 Dec 2011 11:05:22 +0200
+
+cupt (2.3.0) unstable; urgency=low
+
+  * Upload to unstable.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 27 Nov 2011 13:14:13 +0200
+
+cupt (2.3.0~rc1) experimental; urgency=low
+
+  * console:
+    - Common options:
+      - New options '--include-archives', '--exclude-archives',
+        '--include-codenames', --exclude-codenames'.
+    - 'policy':
+      - 'Candidate' field name is ambiguous, changed it to 'Preferred'.
+    - 'source':
+      - Downloading source package parts: include only those codename/component
+        pairs to long descriptions which belong to a selected base
+        download URI.
+      - Don't try to re-download already existing (i.e. hash sums match) files.
+    - Managing packages:
+      - Don't print misleading 'Performing requested actions' when there is
+        nothing to do.
+      - New option '--show-not-preferred'.
+      - Don't uppercase action names anymore.
+      - Show also action summary.
+      - New options '--summary-only', '--no-summary'.
+    - 'search':
+      - Output short description(s) even if all search expressions was found in
+        the package name.
+      - Sort packages before the processing. That reduces a program's system
+        time by making file reads more linear. As a consequence, an output is
+        now sorted too.
+      - Now searches in the localized description if present.
+  * lib:
+    - system/resolvers/native:
+      - Removing automatically installed packages: stopped considering
+        those inter-package relations which are satisfied by some
+        non-removable package.
+      - Implemented partially sticked packages. This should get rid of
+        duplicate solutions. (Closes: #641473)
+    - download/progresses/console:
+      - Printing 'download failed' messages: use a download number instead of
+        the download description.
+      - Printing 'download failed' messages: reformatted to have the error
+        string earlier in the string and match the 'Get:<number>' style.
+    - config:
+      - New options 'cupt::cache::limit-releases::by-archive',
+        'cupt::cache::limit-releases::by-archive::type'.
+      - New options 'cupt::cache::limit-releases::by-codename',
+        'cupt::cache::limit-releases::by-codename::type'.
+      - New option 'cupt::console::actions-preview::show-not-preferred'.
+      - New options 'cupt::console::actions-preview::show-summary',
+        'cupt::console::actions-preview::show-details'.
+      - New option 'cupt::cache::pin::addendums::but-automatic-upgrades'.
+      - The APT option 'apt::acquire::translations' is no more used.
+      - New option 'cupt::languages::indexes'.
+      - New option 'cupt::console::use-colors'.
+      - Recognize (but don't use) the APT option 'acquire::languages'.
+    - system/worker:
+      - Logging: log errors too.
+      - Downloading package archives: include only those codename/component
+        pairs to long descriptions which belong to a selected base
+        download URI.
+      - Updating release and index data: use i18n/Index for downloading package
+        description localizations (Closes: #547948).
+      - Updating release and index data: download all variants of requested
+        description localizations, not only the first successful one.
+      - 'getArchivesInfo': fixed an undefined behavior while obtaining the
+        result of readlink(2). (Closes: #638327)
+    - cache:
+      - Honor 'cupt::cache::limit-releases::*' options.
+      - Process all requested translations, not only the first successful one.
+    - cache/releaseinfo:
+      - New field 'butAutomaticUpgrades'.
+    - hashsums:
+      - Reduce CPU overhead of the calculating hashes of short strings.
+    - 'fatal', 'warn', 'debug', 'simulate': are deprecated now.
+  * doc:
+    - man:
+      - [Jonathan Nieder] Split off a cupt.conf(5) page from cupt(1).
+        Thanks to A. Costa for the idea (Closes: #648012).
+    - What was referred as 'candidate version' is really
+      the 'preferred version'.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 21 Nov 2011 21:18:47 +0200
+
+cupt (2.2.2) unstable; urgency=low
+
+  * debian:
+    - libcupt2-0.postinst:
+      - Don't copy APT GnuPG keyring here anymore. Since 2.1.x Cupt has its
+        own directory for repository caches so no work is possible until
+        the repository lists are generated first time, and at that time
+        the keyring will be copied anyway.
+  * lib:
+    - cache:
+      - Use 'apt-key exportall' in the 'copy the keyring' hack. Thanks to
+        Jonathan Nieder for the report and the patch idea. (Closes: #646993)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Mon, 31 Oct 2011 21:40:46 +0200
+
+cupt (2.2.1) unstable; urgency=low
+
+  * console:
+    - Managing packages:
+      - Fixed the work of action override options inside the interactive
+        prompt for new package expressions.
+      - 'markauto', 'unmarkauto': reject not installed packages. Thanks to
+        Karol Kozłowski for the report.
+  * lib:
+    - system/resolvers/native:
+      - Made sure that if the package is auto-removed there are no other
+        resolver reasons present. Thanks to Karol Kozłowski for the report.
+        (Closes: #643798)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 06 Oct 2011 20:42:16 +0300
+
 cupt (2.2.0) unstable; urgency=low
 
   * Upload to unstable.

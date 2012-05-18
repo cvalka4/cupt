@@ -17,12 +17,15 @@
 **************************************************************************/
 #include <cstdio>
 #include <cstring>
+#include <cstddef>
 
 #include <libgen.h>
 #include <glob.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <fnmatch.h>
 
 #include <internal/common.hpp>
 #include <internal/filesystem.hpp>
@@ -49,13 +52,9 @@ string dirname(const string& path)
 	return result;
 }
 
-string move(const string& oldPath, const string& newPath)
+bool move(const string& oldPath, const string& newPath)
 {
-	if (rename(oldPath.c_str(), newPath.c_str()) == -1)
-	{
-		return sf(__("unable to rename '%s' to '%s': EEE"), oldPath.c_str(), newPath.c_str());
-	}
-	return "";
+	return (rename(oldPath.c_str(), newPath.c_str()) != -1);
 }
 
 vector< string > glob(const string& param)
@@ -67,7 +66,7 @@ vector< string > glob(const string& param)
 	if (result != 0 && result != GLOB_NOMATCH)
 	{
 		globfree(&glob_result);
-		fatal("glob() failed: '%s': EEE", param.c_str());
+		fatal2e(__("%s() failed: '%s'"), "glob", param);
 	}
 	for (size_t i = 0; i < glob_result.gl_pathc; ++i)
 	{
@@ -77,9 +76,60 @@ vector< string > glob(const string& param)
 	return strings;
 }
 
-bool __stat(const string& path, struct stat* result)
+vector< string > lglob(const string& directoryPath, const string& shellPattern)
 {
-	auto error = stat(path.c_str(), result);
+	auto dirPtr = opendir(directoryPath.c_str());
+	if (!dirPtr)
+	{
+		fatal2e(__("unable to open the directory '%s'"), directoryPath);
+	}
+
+	vector< string > strings;
+
+	struct dirent* directoryEntryPtr = (struct dirent*)malloc(
+			offsetof(struct dirent, d_name) + pathconf(directoryPath.c_str(), _PC_NAME_MAX) + 1);
+	struct dirent* resultDirectoryEntryPtr;
+
+	auto freeResources = [&dirPtr, &directoryEntryPtr, &directoryPath]()
+	{
+		free(directoryEntryPtr);
+		if (closedir(dirPtr) == -1)
+		{
+			fatal2e(__("unable to close the directory '%s'"), directoryPath);
+		}
+	};
+
+	for (;;)
+	{
+		auto readdirrResult = readdir_r(dirPtr, directoryEntryPtr, &resultDirectoryEntryPtr);
+		if (readdirrResult)
+		{
+			freeResources();
+			fatal2(__("%s() failed: '%s'"), "readdir_r", directoryPath);
+		}
+
+		if (!resultDirectoryEntryPtr)
+		{
+			freeResources();
+			return strings;
+		}
+
+		const char* const& d_name = resultDirectoryEntryPtr->d_name;
+		if (d_name[0] == '.')
+		{
+			continue;
+		}
+
+		if (!fnmatch(shellPattern.c_str(), d_name, 0))
+		{
+			strings.push_back(directoryPath + '/' + d_name);
+		}
+	}
+}
+
+bool __lstat(const string& path, struct stat* result)
+{
+	auto error = lstat(path.c_str(), result);
 	if (error)
 	{
 		if (errno == ENOENT)
@@ -88,7 +138,7 @@ bool __stat(const string& path, struct stat* result)
 		}
 		else
 		{
-			fatal("stat() failed: '%s': EEE", path.c_str());
+			fatal2e(__("%s() failed: '%s'"), "lstat", path);
 		}
 	}
 	return true;
@@ -97,27 +147,48 @@ bool __stat(const string& path, struct stat* result)
 bool fileExists(const string& path)
 {
 	struct stat s;
-	return __stat(path, &s) && (S_ISREG(s.st_mode) || S_ISLNK(s.st_mode) || S_ISFIFO(s.st_mode));
+	return __lstat(path, &s) && (S_ISREG(s.st_mode) || S_ISLNK(s.st_mode) || S_ISFIFO(s.st_mode));
 }
 
 bool dirExists(const string& path)
 {
 	struct stat s;
-	return __stat(path, &s) && S_ISDIR(s.st_mode);
+	return __lstat(path, &s) && S_ISDIR(s.st_mode);
 }
 
 size_t fileSize(const string& path)
 {
 	struct stat s;
-	if (!__stat(path, &s))
+	if (!__lstat(path, &s))
 	{
-		fatal("the file '%s' does not exists", path.c_str());
+		fatal2(__("the file '%s' does not exist"), path);
 	}
 	if (!S_ISREG(s.st_mode))
 	{
-		fatal("the file '%s' is not a regular file", path.c_str());
+		fatal2(__("the file '%s' is not a regular file"), path);
 	}
 	return s.st_size;
+}
+
+void mkpath(const string& path)
+{
+	auto ensureDirectoryExist = [](const string& pathPart)
+	{
+		if (mkdir(pathPart.c_str(), 0755) == -1)
+		{
+			if (errno != EEXIST)
+			{
+				fatal2e(__("unable to create the directory '%s'"), pathPart);
+			}
+		}
+	};
+
+	size_t position = 0;
+	while (position = path.find('/', ++position), position != string::npos)
+	{
+		ensureDirectoryExist(path.substr(0, position));
+	}
+	ensureDirectoryExist(path);
 }
 
 }

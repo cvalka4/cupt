@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -29,7 +29,7 @@
 namespace cupt {
 namespace cache {
 
-shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::InitializationParameters& initParams)
+SourceVersion* SourceVersion::parseFromFile(const Version::InitializationParameters& initParams)
 {
 	auto v = new SourceVersion;
 
@@ -57,18 +57,16 @@ shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::Initiali
 		{
 			if (tagValue.first != tagValue.second)
 			{
-				fatal("unexpected non-empty tag value '%s'", string(tagValue).c_str());
+				fatal2(__("unexpected non-empty tag value '%s'"), string(tagValue));
 			}
 			string block;
 			parser.parseAdditionalLines(block);
 			auto lines = internal::split('\n', block);
-			FORIT(lineIt, lines)
+			for (const string& line: lines)
 			{
-				const string& line = *lineIt;
-
 				if (!regex_match(line, lineMatch, checksumsLineRegex))
 				{
-					fatal("malformed line '%s'", line.c_str());
+					fatal2(__("malformed line '%s'"), line);
 				}
 				const string name = lineMatch[3];
 
@@ -159,25 +157,25 @@ shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::Initiali
 
 	if (v->versionString.empty())
 	{
-		fatal("version string isn't defined");
+		fatal2(__("version string isn't defined"));
 	}
 	if (v->architectures.empty())
 	{
-		warn("source package %s, version %s: architectures aren't defined, setting them to 'all'",
-				v->packageName.c_str(), v->versionString.c_str());
+		warn2(__("source package %s, version %s: architectures aren't defined, setting them to 'all'"),
+				v->packageName, v->versionString);
 		v->architectures.push_back("all");
 	}
 	// no need to verify hash sums for emptyness, it's guarantted by parsing algorithm above
 
-	return shared_ptr< SourceVersion >(v);
+	return v;
 }
 
-bool SourceVersion::areHashesEqual(const shared_ptr< const Version >& other) const
+bool SourceVersion::areHashesEqual(const Version* other) const
 {
-	shared_ptr< const SourceVersion > o = dynamic_pointer_cast< const SourceVersion >(other);
+	auto o = dynamic_cast< const SourceVersion* >(other);
 	if (!o)
 	{
-		fatal("internal error: areHashesEqual: non-source version parameter");
+		fatal2i("areHashesEqual: non-source version parameter");
 	}
 	for (size_t i = 0; i < SourceVersion::FileParts::Count; ++i)
 	{
@@ -200,10 +198,10 @@ bool SourceVersion::areHashesEqual(const shared_ptr< const Version >& other) con
 }
 
 const string SourceVersion::FileParts::strings[] = {
-	__("Tarball"), __("Diff"), __("Dsc")
+	N__("Tarball"), N__("Diff"), N__("Dsc")
 };
 const string SourceVersion::RelationTypes::strings[] = {
-	__("Build-Depends"), __("Build-Depends-Indep"), __("Build-Conflicts"), __("Build-Conflicts-Indep"),
+	N__("Build-Depends"), N__("Build-Depends-Indep"), N__("Build-Conflicts"), N__("Build-Conflicts-Indep"),
 };
 const char* SourceVersion::RelationTypes::rawStrings[] = {
 	"build-depends", "build-depend-indep", "build-conflicts", "build-conflicts-indep",

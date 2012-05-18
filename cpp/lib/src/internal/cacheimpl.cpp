@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -38,6 +38,15 @@
 namespace cupt {
 namespace internal {
 
+CacheImpl::CacheImpl()
+	: __smatch_ptr(new smatch)
+{}
+
+CacheImpl::~CacheImpl()
+{
+	delete __smatch_ptr;
+}
+
 void CacheImpl::processProvides(const string* packageNamePtr,
 		const char* providesStringStart, const char* providesStringEnd)
 {
@@ -49,40 +58,39 @@ void CacheImpl::processProvides(const string* packageNamePtr,
 			providesStringStart, providesStringEnd, callback);
 }
 
-shared_ptr< Package > CacheImpl::newBinaryPackage(const string& packageName) const
+Package* CacheImpl::newBinaryPackage(const string& packageName) const
 {
 	bool needsReinstall = false;
-	smatch m;
 	FORIT(regexPtrIt, packageNameRegexesToReinstall)
 	{
-		if (regex_search(packageName, m, **regexPtrIt))
+		if (regex_search(packageName, *__smatch_ptr, **regexPtrIt))
 		{
 			needsReinstall = true;
 			break;
 		}
 	}
 
-	return shared_ptr< Package >(new BinaryPackage(binaryArchitecture, needsReinstall));
+	return new BinaryPackage(binaryArchitecture.get(), needsReinstall);
 }
 
-shared_ptr< Package > CacheImpl::newSourcePackage(const string& /* packageName */) const
+Package* CacheImpl::newSourcePackage(const string& /* packageName */) const
 {
-	return shared_ptr< Package >(new SourcePackage(binaryArchitecture));
+	return new SourcePackage(binaryArchitecture.get());
 }
 
-shared_ptr< Package > CacheImpl::preparePackage(unordered_map< string, vector< PrePackageRecord > >& pre,
-		unordered_map< string, shared_ptr< Package > >& target, const string& packageName,
+Package* CacheImpl::preparePackage(unordered_map< string, vector< PrePackageRecord > >& pre,
+		unordered_map< string, unique_ptr< Package > >& target, const string& packageName,
 		decltype(&CacheImpl::newBinaryPackage) packageBuilderMethod) const
 {
 	auto preIt = pre.find(packageName);
 	if (preIt != pre.end())
 	{
-		shared_ptr< Package >& package = target[packageName];
+		auto& package = target[packageName];
 		if (!package)
 		{
 			// there was no such package before, and an insertion occured
 			// so, we need to create the package
-			package = (this->*packageBuilderMethod)(packageName);
+			package.reset( (this->*packageBuilderMethod)(packageName) );
 		}
 		vector< PrePackageRecord >& preRecord = preIt->second;
 		FORIT(preRecordIt, preRecord)
@@ -95,18 +103,18 @@ shared_ptr< Package > CacheImpl::preparePackage(unordered_map< string, vector< P
 			package->addEntry(versionInitParams);
 		}
 		preRecord.clear();
-		return package;
+		return package.get();
 	}
 	else
 	{
-		return shared_ptr< Package >();
+		return nullptr;
 	}
 }
 
-vector< shared_ptr< const BinaryVersion > >
+vector< const BinaryVersion* >
 CacheImpl::getSatisfyingVersions(const Relation& relation) const
 {
-	vector< shared_ptr< const BinaryVersion > > result;
+	vector< const BinaryVersion* > result;
 
 	const string& packageName = relation.packageName;
 
@@ -171,7 +179,7 @@ CacheImpl::getSatisfyingVersions(const Relation& relation) const
 	return result;
 }
 
-shared_ptr< const BinaryPackage > CacheImpl::getBinaryPackage(const string& packageName) const
+const BinaryPackage* CacheImpl::getBinaryPackage(const string& packageName) const
 {
 	auto it = binaryPackages.find(packageName);
 	if (it == binaryPackages.end())
@@ -179,15 +187,15 @@ shared_ptr< const BinaryPackage > CacheImpl::getBinaryPackage(const string& pack
 		auto prepareResult = preparePackage(preBinaryPackages,
 				binaryPackages, packageName, &CacheImpl::newBinaryPackage);
 		// can be empty/NULL also
-		return static_pointer_cast< const BinaryPackage >(prepareResult);
+		return static_cast< const BinaryPackage* >(prepareResult);
 	}
 	else
 	{
-		return static_pointer_cast< const BinaryPackage >(it->second);
+		return static_cast< const BinaryPackage* >(it->second.get());
 	}
 }
 
-shared_ptr< const SourcePackage > CacheImpl::getSourcePackage(const string& packageName) const
+const SourcePackage* CacheImpl::getSourcePackage(const string& packageName) const
 {
 	auto it = sourcePackages.find(packageName);
 	if (it == sourcePackages.end())
@@ -195,11 +203,11 @@ shared_ptr< const SourcePackage > CacheImpl::getSourcePackage(const string& pack
 		auto prepareResult = preparePackage(preSourcePackages,
 				sourcePackages, packageName, &CacheImpl::newSourcePackage);
 		// can be empty/NULL also
-		return static_pointer_cast< const SourcePackage >(prepareResult);
+		return static_cast< const SourcePackage* >(prepareResult);
 	}
 	else
 	{
-		return static_pointer_cast< const SourcePackage >(it->second);
+		return static_cast< const SourcePackage* >(it->second.get());
 	}
 }
 
@@ -223,7 +231,7 @@ void CacheImpl::parseSourcesLists()
 	}
 	catch (Exception&)
 	{
-		fatal("error while parsing sources list");
+		fatal2(__("unable to parse the sources list"));
 	}
 }
 
@@ -233,14 +241,15 @@ void CacheImpl::parseSourceList(const string& path)
 	File file(path, "r", openError);
 	if (!openError.empty())
 	{
-		fatal("unable to open file '%s': %s", path.c_str(), openError.c_str());
+		fatal2(__("unable to open the file '%s': %s"), path, openError);
 	}
 
 	string line;
 	static sregex toSkip = sregex::compile("^\\s*(?:#.*)?$");
+	size_t lineNumber = 0;
 
+	try
 	{
-		size_t lineNumber = 0;
 		while (! file.getLine(line).eof())
 		{
 			++lineNumber;
@@ -258,7 +267,7 @@ void CacheImpl::parseSourceList(const string& path)
 			// type
 			if (tokens.empty())
 			{
-				fatal("undefined source type at file '%s', line %u", path.c_str(), lineNumber);
+				fatal2(__("undefined source type"));
 			}
 			else
 			{
@@ -272,14 +281,14 @@ void CacheImpl::parseSourceList(const string& path)
 				}
 				else
 				{
-					fatal("incorrect source type at file '%s', line %u", path.c_str(), lineNumber);
+					fatal2(__("incorrect source type"));
 				}
 			}
 
 			// uri
 			if (tokens.size() < 2)
 			{
-				fatal("undefined source uri at file '%s', line %u", path.c_str(), lineNumber);
+				fatal2(__("undefined source uri"));
 			}
 			else
 			{
@@ -288,7 +297,7 @@ void CacheImpl::parseSourceList(const string& path)
 
 			if (tokens.size() < 3)
 			{
-				fatal("undefined source distribution at file '%s', line %u", path.c_str(), lineNumber);
+				fatal2(__("undefined source distribution"));
 			}
 			else
 			{
@@ -321,28 +330,145 @@ void CacheImpl::parseSourceList(const string& path)
 				}
 				else
 				{
-					fatal("distribution doesn't end with a slash at file '%s', line %u", path.c_str(), lineNumber);
+					fatal2(__("distribution doesn't end with a slash"));
 				}
 			}
 		}
 	}
+	catch (Exception&)
+	{
+		fatal2(__("(at the file '%s', line %u)"), path, lineNumber);
+	}
 }
 
-void CacheImpl::processIndexEntry(const IndexEntry& indexEntry)
+class ReleaseLimits
+{
+	struct Item
+	{
+		std::function< string (const ReleaseInfo&) > attributeExtractor;
+		bool typeIsInclude;
+		vector< string > values;
+	};
+	std::list< Item > __items;
+ public:
+	ReleaseLimits(const Config& config)
+	{
+		const static map< string, std::function< string (const ReleaseInfo&) > > limitCategories = {
+			{ "archive", [](const ReleaseInfo& ri) { return ri.archive; } },
+			{ "codename", [](const ReleaseInfo& ri) { return ri.codename; } }
+		};
+
+		FORIT(categoryIt, limitCategories)
+		{
+			auto limitValuesOptionName = string("cupt::cache::limit-releases::by-") + categoryIt->first;
+			auto limitTypeOptionName = limitValuesOptionName + "::type";
+
+			auto limitType = config.getString(limitTypeOptionName);
+			bool limitTypeIsInclude = true /* will be re-initialized anyway */;
+			if (limitType == "none")
+			{
+				continue;
+			}
+			else if (limitType == "include")
+			{
+				limitTypeIsInclude = true;
+			}
+			else if (limitType == "exclude")
+			{
+				limitTypeIsInclude = false;
+			}
+			else
+			{
+				try
+				{
+					fatal2(__("the option '%s' can have only values 'none', 'include' or 'exclude'"),
+							limitTypeOptionName);
+				}
+				catch (Exception&)
+				{
+					continue;
+				}
+			}
+			auto limitValues = config.getList(limitValuesOptionName);
+
+			__items.push_back(Item { categoryIt->second, limitTypeIsInclude, limitValues });
+		}
+	}
+
+	bool isExcluded(const ReleaseInfo& releaseInfo) const
+	{
+		FORIT(itemIt, __items)
+		{
+			bool foundInLimitValues = std::find(itemIt->values.begin(), itemIt->values.end(),
+					(itemIt->attributeExtractor)(releaseInfo)) != itemIt->values.end();
+			if (itemIt->typeIsInclude != foundInLimitValues)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+};
+
+void CacheImpl::processIndexEntries(bool useBinary, bool useSource)
+{
+	ReleaseLimits releaseLimits(*config);
+	FORIT(indexEntryIt, indexEntries)
+	{
+		const IndexEntry& entry = *indexEntryIt;
+
+		if (entry.category == IndexEntry::Binary && !useBinary)
+		{
+			continue;
+		}
+		if (entry.category == IndexEntry::Source && !useSource)
+		{
+			continue;
+		}
+
+		processIndexEntry(entry, releaseLimits);
+	}
+}
+
+shared_ptr< ReleaseInfo > CacheImpl::getReleaseInfo(const Config& config, const IndexEntry& indexEntry)
+{
+	auto path = cachefiles::getPathOfReleaseList(config, indexEntry);
+	auto insertResult = releaseInfoCache.insert({ path, {} });
+	auto& cachedValue = insertResult.first->second;
+	if (insertResult.second)
+	{
+		auto alias = indexEntry.uri + ' ' + indexEntry.distribution;
+		cachedValue = cachefiles::getReleaseInfo(config, path, alias);
+		cachedValue->verified = cachefiles::verifySignature(config, path, alias);
+	}
+	if (!cachedValue)
+	{
+		throw Exception(""); // !cachedValue means that getReleaseInfo has failed before
+	}
+	return shared_ptr< ReleaseInfo > (new ReleaseInfo(*cachedValue));
+}
+
+void CacheImpl::processIndexEntry(const IndexEntry& indexEntry,
+		const ReleaseLimits& releaseLimits)
 {
 	string indexFileToParse = cachefiles::getPathOfIndexList(*config, indexEntry);
 
 	string indexAlias = indexEntry.uri + ' ' + indexEntry.distribution + ' ' +
 			indexEntry.component + ' ' +
-			((indexEntry.category == IndexEntry::Binary) ? "(binary)" : "source");
+			((indexEntry.category == IndexEntry::Binary) ? "(binary)" : "(source)");
 
+	shared_ptr< ReleaseInfo > releaseInfo;
 	try
 	{
-		auto releaseFilePath = cachefiles::getPathOfReleaseList(*config, indexEntry);
-		auto releaseInfo = cachefiles::getReleaseInfo(*config, releaseFilePath);
+		releaseInfo = getReleaseInfo(*config, indexEntry);
 		releaseInfo->component = indexEntry.component;
 		releaseInfo->baseUri = indexEntry.uri;
-		releaseInfo->verified = cachefiles::verifySignature(*config, releaseFilePath);
+
+		if (releaseLimits.isExcluded(*releaseInfo))
+		{
+			return;
+		}
 
 		if (indexEntry.category == IndexEntry::Binary)
 		{
@@ -353,38 +479,48 @@ void CacheImpl::processIndexEntry(const IndexEntry& indexEntry)
 			sourceReleaseData.push_back(releaseInfo);
 		}
 
-		processIndexFile(indexFileToParse, indexEntry.category, releaseInfo);
+		processIndexFile(indexFileToParse, indexEntry.category, releaseInfo, indexAlias);
 	}
 	catch (Exception&)
 	{
-		warn("skipped the index '%s'", indexAlias.c_str());
+		warn2(__("skipped the index '%s'"), indexAlias);
 	}
 
-	try  // processing translations if any
+	if (releaseInfo && Version::parseInfoOnly) // description is info-only field
 	{
-		auto descriptionTranslationPaths =
-				cachefiles::getPathsOfLocalizedDescriptions(*config, indexEntry);
-		FORIT(pathIt, descriptionTranslationPaths)
-		{
-			string errorString;
-			File file(*pathIt, "r", errorString);
-			if (errorString.empty())
-			{
-				processTranslationFile(*pathIt);
-				break;
-			}
-		}
-	}
-	catch (Exception&)
-	{
-		warn("skipped translations of the index '%s'", indexAlias.c_str());
+		processTranslationFiles(indexEntry, indexAlias);
 	}
 }
 
+void CacheImpl::processTranslationFiles(const IndexEntry& indexEntry,
+		const string& indexAlias)
+{
+	auto process = [this](const string& path, const string& localizationAlias)
+	{
+		try
+		{
+			if (fs::fileExists(path))
+			{
+				processTranslationFile(path, localizationAlias);
+			}
+		}
+		catch (Exception&)
+		{
+			warn2(__("skipped the index '%s'"), localizationAlias);
+		}
+	};
 
+	auto localizationRecords = cachefiles::getPathsOfLocalizedDescriptions(*config, indexEntry);
+	for (const auto& record: localizationRecords)
+	{
+		auto description = format2(__("'%s' descriptions localization"), record.first);
+		auto localizationAlias = format2(__("%s for '%s'"), description, indexAlias);
+		process(record.second, localizationAlias);
+	}
+}
 
 void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
-		shared_ptr< const ReleaseInfo > releaseInfo)
+		shared_ptr< const ReleaseInfo > releaseInfo, const string& alias)
 {
 	using std::make_pair;
 	auto prePackagesStorage = (category == IndexEntry::Binary ?
@@ -394,11 +530,12 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 	shared_ptr< File > file(new File(path, "r", openError));
 	if (!openError.empty())
 	{
-		fatal("unable to open index file '%s': %s", path.c_str(), openError.c_str());
+		fatal2(__("unable to open the file '%s': %s"), path, openError);
 	}
 
 	releaseInfoAndFileStorage.push_back(make_pair(releaseInfo, file));
 	PrePackageRecord prePackageRecord;
+	prePackageRecord.offset = 0;
 	prePackageRecord.releaseInfoAndFile = &*(releaseInfoAndFileStorage.rbegin());
 
 	try
@@ -410,10 +547,16 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 		{
 			const char* buf;
 			size_t size;
-			file->rawGetLine(buf, size);
-			if (file->eof())
+			auto getNextLine = [&file, &buf, &size, &prePackageRecord]
 			{
-				break;
+				file->rawGetLine(buf, size);
+				prePackageRecord.offset += size;
+			};
+
+			getNextLine();
+			if (size == 0)
+			{
+				break; // eof
 			}
 
 			static const size_t packageAnchorLength = sizeof("Package: ") - 1;
@@ -423,7 +566,7 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 			}
 			else
 			{
-				fatal("unable to find correct Package line");
+				fatal2(__("unable to find a Package line"));
 			}
 
 			try
@@ -432,17 +575,15 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 			}
 			catch (Exception&)
 			{
-				warn("discarding this package version from index file '%s'", path.c_str());
-				while (file->rawGetLine(buf, size), size > 1) {}
+				warn2(__("discarding this package version from the index '%s'"), alias);
+				while (getNextLine(), size > 1) {}
 				continue;
 			}
-
-			prePackageRecord.offset = file->tell();
 
 			auto it = prePackagesStorage->insert(pairForInsertion).first;
 			it->second.push_back(prePackageRecord);
 
-			while (file->rawGetLine(buf, size), size > 1)
+			while (getNextLine(), size > 1)
 			{
 				static const size_t providesAnchorLength = sizeof("Provides: ") - 1;
 				if (*buf == 'P' && size > providesAnchorLength && !memcmp("rovides: ", buf+1, providesAnchorLength-1))
@@ -454,22 +595,23 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 	}
 	catch (Exception&)
 	{
-		fatal("error parsing index file '%s'", path.c_str());
+		fatal2(__("unable to parse the index '%s'"), alias);
 	}
 }
 
-void CacheImpl::processTranslationFile(const string& path)
+void CacheImpl::processTranslationFile(const string& path, const string& alias)
 {
 	string errorString;
-	shared_ptr< File > file(new File(path, "r", errorString));
+	translationFileStorage.emplace_back(path, "r", errorString);
 	if (!errorString.empty())
 	{
-		fatal("unable to open translation file '%s': %s", path.c_str(), errorString.c_str());
+		fatal2(__("unable to open the file '%s': %s"), path, errorString);
 	}
 
+	File* file = &translationFileStorage.back();
 	try
 	{
-		TagParser parser(&*file);
+		TagParser parser(file);
 		TagParser::StringRange tagName, tagValue;
 
 		static const char descriptionSubPattern[] = "Description-";
@@ -481,8 +623,14 @@ void CacheImpl::processTranslationFile(const string& path)
 		TranslationPosition translationPosition;
 		translationPosition.file = file;
 
-		while ((recordPosition = file->tell()), (parser.parseNextLine(tagName, tagValue) && !file->eof()))
+		while (true)
 		{
+			recordPosition = file->tell();
+			if (!parser.parseNextLine(tagName, tagValue))
+			{
+				if (file->eof()) break; else continue;
+			}
+
 			bool hashSumFound = false;
 			bool translationFound = false;
 
@@ -503,19 +651,19 @@ void CacheImpl::processTranslationFile(const string& path)
 
 			if (!hashSumFound)
 			{
-				fatal("unable to find md5 hash in a translation record starting at byte '%u'", recordPosition);
+				fatal2(__("unable to find the md5 hash in the record starting at byte '%u'"), recordPosition);
 			}
 			if (!translationFound)
 			{
-				fatal("unable to find translation in a translation record starting at byte '%u'", recordPosition);
+				fatal2(__("unable to find the translation in the record starting at byte '%u'"), recordPosition);
 			}
 
-			translations[md5] = translationPosition;
+			translations.insert({ std::move(md5), translationPosition });
 		}
 	}
 	catch(Exception&)
 	{
-		fatal("error parsing translation file '%s'", path.c_str());
+		fatal2(__("unable to parse the index '%s'"), alias);
 	}
 }
 
@@ -524,7 +672,8 @@ void CacheImpl::parsePreferences()
 	pinInfo.reset(new PinInfo(config, systemState));
 }
 
-ssize_t CacheImpl::getPin(const shared_ptr< const Version >& version, const string& installedVersionString) const
+ssize_t CacheImpl::getPin(const Version* version,
+		const std::function< string () >& getInstalledVersionString) const
 {
 	if (Cache::memoize)
 	{
@@ -535,18 +684,21 @@ ssize_t CacheImpl::getPin(const shared_ptr< const Version >& version, const stri
 		}
 	}
 
-	auto result = pinInfo->getPin(version, installedVersionString);
+	auto result = pinInfo->getPin(version, getInstalledVersionString());
 	if (Cache::memoize)
 	{
-		pinCache.insert(std::make_pair(version, result));
+		pinCache.insert({ version, result });
 	}
 	return result;
 }
 
-pair< string, string > CacheImpl::getLocalizedDescriptions(const shared_ptr< const BinaryVersion >& version) const
+pair< string, string > CacheImpl::getLocalizedDescriptions(const BinaryVersion* version) const
 {
-	string source = version->shortDescription + "\n" + version->longDescription;
-	string sourceHash = HashSums::getHashOfString(HashSums::MD5, source);
+	static const string descriptionHashFieldName = "Description-md5";
+
+	const string& sourceHash = (version->others && version->others->count(descriptionHashFieldName)) ?
+			version->others->find(descriptionHashFieldName)->second :
+			HashSums::getHashOfString(HashSums::MD5, version->shortDescription + "\n" + version->longDescription);
 
 	auto it = translations.find(sourceHash);
 	if (it != translations.end())
@@ -581,7 +733,8 @@ void CacheImpl::parseExtendedStates()
 		File file(path, "r", openError);
 		if (!openError.empty())
 		{
-			fatal("unable to open file '%s': %s", path.c_str(), openError.c_str());
+			warn2(__("unable to open the extended states file '%s': %s"), path, openError);
+			return;
 		}
 
 		internal::TagParser parser(&file);
@@ -591,8 +744,7 @@ void CacheImpl::parseExtendedStates()
 		{
 			if (!tagName.equal("Package", 7))
 			{
-				fatal("wrong tag: expected 'Package', got '%s' at file '%s'",
-						string(tagName).c_str(), path.c_str());
+				fatal2(__("wrong tag: expected 'Package', got '%s'"), string(tagName));
 			}
 
 			string packageName = tagValue;
@@ -610,26 +762,25 @@ void CacheImpl::parseExtendedStates()
 					}
 					else if (!tagValue.equal(BUFFER_AND_SIZE("0")))
 					{
-						fatal("bad value '%s' (should be 0 or 1) for the package '%s' at file '%s'",
-								string(tagValue).c_str(), packageName.c_str(), path.c_str());
+						fatal2(__("bad value '%s' (should be 0 or 1) for the package '%s'"),
+								string(tagValue), packageName);
 					}
 				}
 			}
 
 			if (!valueFound)
 			{
-				fatal("no 'Auto-Installed' tag for the package '%s' at file '%s'",
-						packageName.c_str(), path.c_str());
+				fatal2(__("didn't found the 'Auto-Installed' tag for the package '%s'"), packageName);
 			}
 		}
 	}
 	catch (Exception&)
 	{
-		fatal("error while parsing extended states");
+		fatal2(__("unable to parse extended states"));
 	}
 }
 
-vector< shared_ptr< const BinaryVersion > >
+vector< const BinaryVersion* >
 CacheImpl::getSatisfyingVersions(const RelationExpression& relationExpression) const
 {
 	string memoizeKey;
@@ -653,12 +804,11 @@ CacheImpl::getSatisfyingVersions(const RelationExpression& relationExpression) c
 		relationIt != relationExpression.end(); ++relationIt)
 	{
 		auto source = getSatisfyingVersions(*relationIt);
-		FORIT(versionIt, source)
+		for (const auto& version: source)
 		{
-			auto predicate = std::bind2nd(PointerEqual< const BinaryVersion >(), *versionIt);
-			if (std::find_if(result.begin(), result.end(), predicate) == result.end())
+			if (std::find(result.begin(), result.end(), version) == result.end())
 			{
-				result.push_back(*versionIt);
+				result.push_back(version);
 			}
 		}
 	}

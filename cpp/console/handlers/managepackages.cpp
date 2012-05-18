@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -23,10 +23,13 @@ using std::endl;
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <boost/lexical_cast.hpp>
+
 #include "../common.hpp"
 #include "../handlers.hpp"
 #include "../misc.hpp"
 #include "../selectors.hpp"
+#include "../colorizer.hpp"
 
 #include <cupt/system/state.hpp>
 #include <cupt/system/resolver.hpp>
@@ -35,17 +38,21 @@ using std::endl;
 #include <cupt/file.hpp>
 #include <cupt/system/worker.hpp>
 #include <cupt/cache/sourceversion.hpp>
+#include <cupt/cache/releaseinfo.hpp>
 
 typedef Worker::Action WA;
+const WA::Type fakeNotPolicyVersionAction = WA::Type(999);
+const WA::Type fakeAutoRemove = WA::Type(1000);
+const WA::Type fakeAutoPurge = WA::Type(1001);
 
-static void preProcessMode(ManagePackages::Mode& mode, const shared_ptr< Config >& config,
-		Resolver& resolver)
+
+static void preProcessMode(ManagePackages::Mode& mode, Config& config, Resolver& resolver)
 {
 	if (mode == ManagePackages::FullUpgrade || mode == ManagePackages::SafeUpgrade)
 	{
 		if (mode == ManagePackages::SafeUpgrade)
 		{
-			config->setScalar("cupt::resolver::no-remove", "yes");
+			config.setScalar("cupt::resolver::no-remove", "yes");
 		}
 		resolver.upgrade();
 
@@ -55,8 +62,8 @@ static void preProcessMode(ManagePackages::Mode& mode, const shared_ptr< Config 
 	}
 	else if (mode == ManagePackages::Satisfy || mode == ManagePackages::BuildDepends)
 	{
-		config->setScalar("apt::install-recommends", "no");
-		config->setScalar("apt::install-suggests", "no");
+		config.setScalar("apt::install-recommends", "no");
+		config.setScalar("apt::install-suggests", "no");
 	}
 	else if (mode == ManagePackages::BuildDepends)
 	{
@@ -67,9 +74,8 @@ static void preProcessMode(ManagePackages::Mode& mode, const shared_ptr< Config 
 static void unrollFileArguments(vector< string >& arguments)
 {
 	vector< string > newArguments;
-	FORIT(argumentIt, arguments)
+	for (const string& argument: arguments)
 	{
-		const string& argument = *argumentIt;
 		if (!argument.empty() && argument[0] == '@')
 		{
 			const string path = argument.substr(1);
@@ -78,7 +84,7 @@ static void unrollFileArguments(vector< string >& arguments)
 			File file(path, "r", openError);
 			if (!openError.empty())
 			{
-				fatal("unable to open file '%s': %s", path.c_str(), openError.c_str());
+				fatal2(__("unable to open the file '%s': %s"), path, openError);
 			}
 			string line;
 			while (!file.getLine(line).eof())
@@ -110,7 +116,7 @@ void __satisfy_or_unsatisfy(Resolver& resolver,
 	}
 }
 
-static void processSatisfyExpression(const shared_ptr< Config >& config,
+static void processSatisfyExpression(const Config& config,
 		Resolver& resolver, string packageExpression, ManagePackages::Mode mode)
 {
 	if (mode == ManagePackages::Satisfy && !packageExpression.empty() && *(packageExpression.rbegin()) == '-')
@@ -120,7 +126,7 @@ static void processSatisfyExpression(const shared_ptr< Config >& config,
 	}
 
 	auto relationLine = ArchitecturedRelationLine(packageExpression)
-			.toRelationLine(config->getString("apt::architecture"));
+			.toRelationLine(config.getString("apt::architecture"));
 
 	__satisfy_or_unsatisfy(resolver, relationLine, mode);
 }
@@ -133,9 +139,8 @@ static void processBuildDependsExpression(const shared_ptr< Config >& config,
 
 	auto versions = selectSourceVersionsWildcarded(cache, packageExpression);
 
-	FORIT(versionIt, versions)
+	for (const auto& version: versions)
 	{
-		const shared_ptr< const SourceVersion >& version = *versionIt;
 		__satisfy_or_unsatisfy(resolver, version->relations[SourceVersion::RelationTypes::BuildDepends]
 				.toRelationLine(architecture), ManagePackages::Satisfy);
 		__satisfy_or_unsatisfy(resolver, version->relations[SourceVersion::RelationTypes::BuildDependsIndep]
@@ -176,15 +181,23 @@ static void processInstallOrRemoveExpression(const shared_ptr< const Cache >& ca
 		}
 	}
 
-	if (mode == ManagePackages::Install)
+	if (mode == ManagePackages::Install || mode == ManagePackages::InstallIfInstalled)
 	{
 		if (versions.empty())
 		{
 			versions = selectBinaryVersionsWildcarded(cache, packageExpression);
 		}
-		FORIT(versionIt, versions)
+		for (const auto& version: versions)
 		{
-			resolver.installVersion(*versionIt);
+			if (mode == ManagePackages::InstallIfInstalled)
+			{
+				auto&& installedInfo = cache->getSystemState()->getInstalledInfo(version->packageName);
+				if (!installedInfo || installedInfo->status == system::State::InstalledRecord::Status::ConfigFiles)
+				{
+					continue;
+				}
+			}
+			resolver.installVersion(version);
 		}
 	}
 	else // ManagePackages::Remove or ManagePackages::Purge
@@ -219,7 +232,7 @@ static void processInstallOrRemoveExpression(const shared_ptr< const Cache >& ca
 			if (!cache->getSystemState()->getInstalledInfo(packageExpression) &&
 				!getBinaryPackage(cache, packageExpression, false))
 			{
-				fatal("unable to find binary package/expression '%s'", packageExpression.c_str());
+				fatal2(__("unable to find binary package/expression '%s'"), packageExpression);
 			}
 
 			scheduleRemoval(packageExpression);
@@ -236,8 +249,40 @@ static void processAutoFlagChangeExpression(const shared_ptr< const Cache >& cac
 			(mode == ManagePackages::Markauto));
 }
 
+static void processReinstallExpression(const shared_ptr< const Cache >& cache,
+		Resolver& resolver, const string& packageExpression)
+{
+	auto package = getBinaryPackage(cache, packageExpression);
+	auto installedVersion = package->getInstalledVersion();
+	if (!installedVersion)
+	{
+		fatal2(__("the package '%s' is not installed"), packageExpression);
+	}
+	const string& installedVersionString = installedVersion->versionString;
+
+	static const string reinstallVersionSuffix = "~installed";
+	auto reinstallVersionSuffixPosition = installedVersionString.size() - reinstallVersionSuffix.size();
+	if (installedVersionString.size() > reinstallVersionSuffix.size() &&
+			installedVersionString.compare(reinstallVersionSuffixPosition, reinstallVersionSuffix.size(), reinstallVersionSuffix) == 0)
+	{
+		auto targetVersionString = installedVersionString.substr(0, reinstallVersionSuffixPosition);
+		auto targetVersion = package->getSpecificVersion(targetVersionString);
+		if (!targetVersion)
+		{
+			fatal2(__("the package '%s' cannot be reinstalled because there is no corresponding version (%s) available in repositories"),
+					packageExpression, targetVersionString);
+		}
+		resolver.installVersion(static_cast< const BinaryVersion* >(targetVersion));
+	}
+	else
+	{
+		fatal2i("the installed version '%s' of the package '%s' has not a reinstall version suffix '%s'",
+				installedVersionString, packageExpression, reinstallVersionSuffix);
+	}
+}
+
 static void processPackageExpressions(const shared_ptr< Config >& config,
-		const shared_ptr< const Cache >& cache, ManagePackages::Mode mode,
+		const shared_ptr< const Cache >& cache, ManagePackages::Mode& mode,
 		Resolver& resolver, const vector< string >& packageExpressions,
 		set< string >& purgedPackageNames)
 {
@@ -271,9 +316,13 @@ static void processPackageExpressions(const shared_ptr< Config >& config,
 		{
 			mode = ManagePackages::Unmarkauto;
 		}
+		else if (*packageExpressionIt == "--iii")
+		{
+			mode = ManagePackages::InstallIfInstalled;
+		}
 		else if (mode == ManagePackages::Satisfy || mode == ManagePackages::Unsatisfy)
 		{
-			processSatisfyExpression(config, resolver, *packageExpressionIt, mode);
+			processSatisfyExpression(*config, resolver, *packageExpressionIt, mode);
 		}
 		else if (mode == ManagePackages::BuildDepends)
 		{
@@ -282,6 +331,10 @@ static void processPackageExpressions(const shared_ptr< Config >& config,
 		else if (mode == ManagePackages::Markauto || mode == ManagePackages::Unmarkauto)
 		{
 			processAutoFlagChangeExpression(cache, resolver, mode, *packageExpressionIt);
+		}
+		else if (mode == ManagePackages::Reinstall)
+		{
+			processReinstallExpression(cache, resolver, *packageExpressionIt);
 		}
 		else
 		{
@@ -302,11 +355,11 @@ void printUnpackedSizeChanges(const map< string, ssize_t >& unpackedSizesPreview
 	string message;
 	if (totalUnpackedSizeChange >= 0)
 	{
-		message = sf(__("After unpacking %s will be used."),
-				humanReadableSizeString(totalUnpackedSizeChange).c_str());
+		message = format2(__("After unpacking %s will be used."),
+				humanReadableSizeString(totalUnpackedSizeChange));
 	} else {
-		message = sf(__("After unpacking %s will be freed."),
-				humanReadableSizeString(-totalUnpackedSizeChange).c_str());
+		message = format2(__("After unpacking %s will be freed."),
+				humanReadableSizeString(-totalUnpackedSizeChange));
 	}
 
 	cout << message << endl;
@@ -316,37 +369,124 @@ void printDownloadSizes(const pair< size_t, size_t >& downloadSizes)
 {
 	auto total = downloadSizes.first;
 	auto need = downloadSizes.second;
-	cout << sf(__("Need to get %s/%s of archives. "),
-					humanReadableSizeString(need).c_str(),
-					humanReadableSizeString(total).c_str());
+	cout << format2(__("Need to get %s/%s of archives. "),
+			humanReadableSizeString(need), humanReadableSizeString(total));
 }
 
-void showVersion(const shared_ptr< const Cache >& cache, const string& packageName,
-		const Resolver::SuggestedPackage& suggestedPackage)
+struct VersionInfoFlags
 {
-	auto package = cache->getBinaryPackage(packageName);
+	bool versionString;
+	enum class DistributionType { None, Archive, Codename };
+	DistributionType distributionType;
+	bool component;
+	bool vendor;
+
+	VersionInfoFlags(const Config& config)
+	{
+		versionString = config.getBool("cupt::console::actions-preview::show-versions");
+		if (config.getBool("cupt::console::actions-preview::show-archives"))
+		{
+			distributionType = DistributionType::Archive;
+		}
+		else if (config.getBool("cupt::console::actions-preview::show-codenames"))
+		{
+			distributionType = DistributionType::Codename;
+		}
+		else
+		{
+			distributionType = DistributionType::None;
+		}
+		component = config.getBool("cupt::console::actions-preview::show-components");
+		vendor = config.getBool("cupt::console::actions-preview::show-vendors");
+	}
+	bool empty() const
+	{
+		return !versionString && distributionType == DistributionType::None && !component && !vendor;
+	}
+};
+void showVersionInfoIfNeeded(const Cache& cache, const string& packageName,
+		const Resolver::SuggestedPackage& suggestedPackage, WA::Type actionType,
+		VersionInfoFlags flags)
+{
+	if (flags.empty())
+	{
+		return; // nothing to print
+	}
+
+	auto getVersionString = [&flags](const Version* version) -> string
+	{
+		if (!version)
+		{
+			return "";
+		}
+		string result;
+		if (flags.versionString)
+		{
+			result += version->versionString;
+		}
+		if ((flags.distributionType != VersionInfoFlags::DistributionType::None)
+				|| flags.component || flags.vendor)
+		{
+			result += '(';
+			vector< string > chunks;
+			for (const auto& source: version->sources)
+			{
+				string chunk;
+				if (flags.vendor && !source.release->vendor.empty())
+				{
+					chunk += source.release->vendor;
+					chunk += ':';
+				}
+				if (flags.distributionType == VersionInfoFlags::DistributionType::Archive)
+				{
+					chunk += source.release->archive;
+				}
+				else if (flags.distributionType == VersionInfoFlags::DistributionType::Codename)
+				{
+					chunk += source.release->codename;
+				}
+				if (flags.component && !source.release->component.empty())
+				{
+					chunk += "/";
+					chunk += source.release->component;
+				}
+				if (!chunk.empty() && std::find(chunks.begin(), chunks.end(), chunk) == chunks.end())
+				{
+					chunks.push_back(chunk);
+				}
+			}
+			result += join(",", chunks);
+			result += ')';
+		}
+		return result;
+	};
+
+	auto package = cache.getBinaryPackage(packageName);
 	if (!package)
 	{
-		fatal("internal error: no binary package '%s' available", packageName.c_str());
+		fatal2i("no binary package '%s' available", packageName);
 	}
-	auto oldVersion = package->getInstalledVersion();
 
-	string oldVersionString = oldVersion ? oldVersion->versionString : "";
+	string oldVersionString = getVersionString(package->getInstalledVersion());
+	string newVersionString = getVersionString(suggestedPackage.version);
 
-	auto newVersion = suggestedPackage.version;
-	string newVersionString = newVersion ? newVersion->versionString : "";
-
-	if (!oldVersionString.empty() && !newVersionString.empty())
+	if (!oldVersionString.empty() && !newVersionString.empty() &&
+			(actionType != fakeNotPolicyVersionAction || oldVersionString != newVersionString))
 	{
-		cout << sf(" [%s -> %s]", oldVersionString.c_str(), newVersionString.c_str());
+		cout << format2(" [%s -> %s]", oldVersionString, newVersionString);
 	}
 	else if (!oldVersionString.empty())
 	{
-		cout << sf(" [%s]", oldVersionString.c_str());
+		cout << format2(" [%s]", oldVersionString);
 	}
 	else
 	{
-		cout << sf(" [%s]", newVersionString.c_str());
+		cout << format2(" [%s]", newVersionString);
+	}
+
+	if (actionType == fakeNotPolicyVersionAction)
+	{
+		cout << ", " << __("preferred") << ": " << getVersionString(cache.getPolicyVersion(package));
 	}
 }
 
@@ -434,7 +574,7 @@ void checkForRemovalOfEssentialPackages(const shared_ptr< const Cache >& cache,
 	if (!essentialPackageNames.empty())
 	{
 		isDangerous = true;
-		cout << __("WARNING! The following essential packages will be REMOVED:") << endl;
+		cout << __("WARNING! The following essential packages will be removed:") << endl;
 		printPackageNamesByLine(essentialPackageNames);
 	}
 }
@@ -467,7 +607,7 @@ void checkForIgnoredHolds(const shared_ptr< const Cache >& cache,
 	if (!ignoredHoldsPackageNames.empty())
 	{
 		isDangerous = true;
-		cout << __("WARNING! The following packages ON HOLD will change their state:") << endl;
+		cout << __("WARNING! The following packages on hold will change their state:") << endl;
 		printPackageNamesByLine(ignoredHoldsPackageNames);
 	}
 }
@@ -481,7 +621,8 @@ void showReason(const Resolver::SuggestedPackage& suggestedPackage)
 	cout << endl;
 }
 
-void showUnsatisfiedSoftDependencies(const Resolver::Offer& offer)
+void showUnsatisfiedSoftDependencies(const Resolver::Offer& offer,
+		bool showDetails, std::stringstream* summaryStreamPtr)
 {
 	vector< string > messages;
 	FORIT(unresolvedProblemIt, offer.unresolvedProblems)
@@ -491,13 +632,19 @@ void showUnsatisfiedSoftDependencies(const Resolver::Offer& offer)
 
 	if (!messages.empty())
 	{
-		cout << __("Leave the following dependencies unresolved:") << endl;
-		cout << endl;
-		FORIT(messageIt, messages)
+		if (showDetails)
 		{
-			cout << *messageIt << endl;
+			cout << __("Leave the following dependencies unresolved:") << endl;
+			cout << endl;
+			FORIT(messageIt, messages)
+			{
+				cout << *messageIt << endl;
+			}
+			cout << endl;
 		}
-		cout << endl;
+
+		*summaryStreamPtr << format2(__("  %u dependency problems will stay unresolved"),
+				offer.unresolvedProblems.size()) << endl;
 	}
 }
 
@@ -535,8 +682,8 @@ Resolver::UserAnswer::Type askUserAboutSolution(
 		if (isDangerous)
 		{
 			const string confirmationForDangerousAction = __("Yes, do as I say!");
-			cout << sf(__("Dangerous actions selected. Type '%s' if you want to continue, or anything else to go back:"),
-					confirmationForDangerousAction.c_str()) << endl;
+			cout << format2(__("Dangerous actions selected. Type '%s' if you want to continue, or anything else to go back:"),
+					confirmationForDangerousAction) << endl;
 			std::getline(std::cin, answer);
 			if (answer != confirmationForDangerousAction)
 			{
@@ -571,17 +718,253 @@ Resolver::UserAnswer::Type askUserAboutSolution(
 	}
 }
 
+Resolver::SuggestedPackages generateNotPolicyVersionList(const shared_ptr< const Cache >& cache,
+		const Resolver::SuggestedPackages& packages)
+{
+	Resolver::SuggestedPackages result;
+	FORIT(suggestedPackageIt, packages)
+	{
+		const auto& suggestedVersion = suggestedPackageIt->second.version;
+		if (suggestedVersion)
+		{
+			auto policyVersion = cache->getPolicyVersion(getBinaryPackage(cache, suggestedVersion->packageName));
+			if (!(policyVersion == suggestedVersion))
+			{
+				result.insert(*suggestedPackageIt);
+			}
+		}
+	}
+
+	return result;
+}
+
+static string colorizeByActionType(const Colorizer& colorizer,
+		const string& input, WA::Type actionType, bool isAutoInstalled)
+{
+	Colorizer::Color color = Colorizer::Default;
+	switch (actionType)
+	{
+		case WA::Install: color = Colorizer::Cyan; break;
+		#pragma GCC diagnostic ignored "-Wswitch"
+		case WA::Remove: case fakeAutoRemove: color = Colorizer::Yellow; break;
+		case WA::Upgrade: color = Colorizer::Green; break;
+		case WA::Purge: case fakeAutoPurge: color = Colorizer::Red; break;
+		#pragma GCC diagnostic pop
+		case WA::Downgrade: color = Colorizer::Magenta; break;
+		case WA::Configure: color = Colorizer::Blue; break;
+		default: ;
+	}
+	return colorizer.colorize(input, color, !isAutoInstalled /* bold */);
+}
+
+bool wasOrWillBePackageAutoInstalled(const Cache& cache, const string& packageName,
+		const map< string, bool >& autoFlagChanges)
+{
+	if (cache.isAutomaticallyInstalled(packageName))
+	{
+		return true;
+	}
+
+	auto autoFlagChangeIt = autoFlagChanges.find(packageName);
+	if (autoFlagChangeIt != autoFlagChanges.end())
+	{
+		if (autoFlagChangeIt->second) // "set as autoinstalled"
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void printPackageName(const Cache& cache, const Colorizer& colorizer,
+		const string& packageName, WA::Type actionType, const map< string, bool >& autoFlagChanges)
+{
+	bool isAutoInstalled = wasOrWillBePackageAutoInstalled(cache, packageName, autoFlagChanges);
+
+	cout << colorizeByActionType(colorizer, packageName, actionType, isAutoInstalled);
+	if (actionType == WA::Remove || actionType == WA::Purge)
+	{
+		if (isAutoInstalled && !colorizer.enabled())
+		{
+			cout << "(a)";
+		}
+	}
+}
+
+static string colorizeActionName(const Colorizer& colorizer, const string& actionName, WA::Type actionType)
+{
+	if (actionType != WA::Install && actionType != WA::Upgrade &&
+			actionType != WA::Configure && actionType != WA::ProcessTriggers &&
+			actionType != fakeAutoRemove && actionType != fakeAutoPurge)
+	{
+		return colorizer.makeBold(actionName);
+	}
+	else
+	{
+		return actionName;
+	}
+}
+
+void addActionToSummary(const Cache& cache, WA::Type actionType, const string& actionName,
+		const Resolver::SuggestedPackages& suggestedPackages, const map< string, bool >& autoFlagChanges,
+		Colorizer& colorizer, std::stringstream* summaryStreamPtr)
+{
+	size_t manuallyInstalledCount = std::count_if(suggestedPackages.begin(), suggestedPackages.end(),
+			[&cache, &autoFlagChanges](const pair< string, Resolver::SuggestedPackage >& arg)
+			{
+				return !wasOrWillBePackageAutoInstalled(cache, arg.first, autoFlagChanges);
+			});
+	size_t autoInstalledCount = suggestedPackages.size() - manuallyInstalledCount;
+
+	auto getManualCountString = [manuallyInstalledCount, actionType, &colorizer]()
+	{
+		auto s = boost::lexical_cast< string >(manuallyInstalledCount);
+		return colorizeByActionType(colorizer, s, actionType, false);
+	};
+	auto getAutoCountString = [autoInstalledCount, actionType, &colorizer]()
+	{
+		auto s = boost::lexical_cast< string >(autoInstalledCount);
+		return colorizeByActionType(colorizer, s, actionType, true);
+	};
+
+	*summaryStreamPtr << "  ";
+	if (!manuallyInstalledCount)
+	{
+		*summaryStreamPtr << format2(__("%s automatically installed packages %s"),
+				getAutoCountString(), actionName);
+	}
+	else if (!autoInstalledCount)
+	{
+		*summaryStreamPtr << format2(__("%s manually installed packages %s"),
+				getManualCountString(), actionName);
+	}
+	else
+	{
+		*summaryStreamPtr << format2(__("%s manually installed and %s automatically installed packages %s"),
+				getManualCountString(), getAutoCountString(), actionName);
+	}
+	*summaryStreamPtr << endl;
+}
+
+struct PackageChangeInfoFlags
+{
+	bool sizeChange;
+	bool reasons;
+	VersionInfoFlags versionFlags;
+
+	PackageChangeInfoFlags(const Config& config, WA::Type actionType)
+		: versionFlags(config)
+	{
+		sizeChange = (config.getBool("cupt::console::actions-preview::show-size-changes") &&
+				actionType != fakeNotPolicyVersionAction);
+		reasons = (config.getBool("cupt::console::actions-preview::show-reasons") &&
+				actionType != fakeNotPolicyVersionAction);
+	}
+	bool empty() const
+	{
+		return versionFlags.empty() && !sizeChange && !reasons;
+	}
+};
+
+void showPackageChanges(const Config& config, const Cache& cache, Colorizer& colorizer, WA::Type actionType,
+		const Resolver::SuggestedPackages& actionSuggestedPackages,
+		const map< string, bool >& autoFlagChanges, const map< string, ssize_t >& unpackedSizesPreview)
+{
+	PackageChangeInfoFlags showFlags(config, actionType);
+
+	for (const auto& it: actionSuggestedPackages)
+	{
+		const string& packageName = it.first;
+		printPackageName(cache, colorizer, packageName, actionType, autoFlagChanges);
+
+		showVersionInfoIfNeeded(cache, packageName, it.second, actionType, showFlags.versionFlags);
+
+		if (showFlags.sizeChange)
+		{
+			showSizeChange(unpackedSizesPreview.find(packageName)->second);
+		}
+
+		if (!showFlags.empty())
+		{
+			cout << endl; // put newline
+		}
+		else
+		{
+			cout << ' '; // put a space between package names
+		}
+
+		if (showFlags.reasons)
+		{
+			showReason(it.second);
+		}
+	}
+	if (showFlags.empty())
+	{
+		cout << endl;
+	}
+	cout << endl;
+}
+
+Resolver::SuggestedPackages filterNoLongerNeeded(const Resolver::SuggestedPackages& source, bool invert)
+{
+	Resolver::SuggestedPackages result;
+	for (const auto& suggestedPackage: source)
+	{
+		bool isNoLongerNeeded = false;
+		for (const auto& reasonPtr: suggestedPackage.second.reasons)
+		{
+			if (dynamic_pointer_cast< const Resolver::AutoRemovalReason >(reasonPtr))
+			{
+				isNoLongerNeeded = true;
+				break;
+			}
+		}
+		if (isNoLongerNeeded != invert)
+		{
+			result.insert(result.end(), suggestedPackage);
+		}
+	}
+	return result;
+}
+
+Resolver::SuggestedPackages getSuggestedPackagesByAction(const shared_ptr< const Cache >& cache,
+		const Resolver::Offer& offer,
+		const shared_ptr< const Worker::ActionsPreview >& actionsPreview, WA::Type actionType)
+{
+	switch (actionType)
+	{
+		#pragma GCC diagnostic ignored "-Wswitch"
+		case fakeNotPolicyVersionAction:
+			return generateNotPolicyVersionList(cache, offer.suggestedPackages);
+		case fakeAutoRemove:
+			return filterNoLongerNeeded(actionsPreview->groups[WA::Remove], false);
+		case fakeAutoPurge:
+			return filterNoLongerNeeded(actionsPreview->groups[WA::Purge], false);
+		#pragma GCC diagnostic pop
+		case WA::Remove:
+			return filterNoLongerNeeded(actionsPreview->groups[WA::Remove], true);
+		case WA::Purge:
+			return filterNoLongerNeeded(actionsPreview->groups[WA::Purge], true);
+		default:
+			return actionsPreview->groups[actionType];
+	}
+}
+
 Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >& config,
 		const shared_ptr< const Cache >& cache, const shared_ptr< Worker >& worker,
-		bool showVersions, bool showSizeChanges, const set< string >& purgedPackageNames,
-		bool& addArgumentsFlag)
+		bool showNotPreferred,
+		const set< string >& purgedPackageNames, bool& addArgumentsFlag, bool& thereIsNothingToDo)
 {
-	auto result = [&config, &cache, &worker, showVersions, showSizeChanges, &purgedPackageNames, &addArgumentsFlag]
+	auto result = [&config, &cache, &worker, showNotPreferred,
+			&purgedPackageNames, &addArgumentsFlag, &thereIsNothingToDo]
 			(const Resolver::Offer& offer) -> Resolver::UserAnswer::Type
 	{
 		addArgumentsFlag = false;
+		thereIsNothingToDo = false;
 
-		auto showReasons = config->getBool("cupt::resolver::track-reasons");
+		auto showSummary = config->getBool("cupt::console::actions-preview::show-summary");
+		auto showDetails = config->getBool("cupt::console::actions-preview::show-details");
 
 		worker->setDesiredState(offer);
 		FORIT(packageNameIt, purgedPackageNames)
@@ -592,91 +975,84 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 		auto actionsPreview = worker->getActionsPreview();
 		auto unpackedSizesPreview = worker->getUnpackedSizesPreview();
 
+		Colorizer colorizer(*config);
+
+		std::stringstream summaryStream;
+
 		size_t actionCount = 0;
 		{ // print planned actions
-			static const map< WA::Type, string > actionNames = {
-				{ WA::Install, __("INSTALLED") },
-				{ WA::Remove, __("REMOVED") },
-				{ WA::Upgrade, __("UPGRADED") },
-				{ WA::Purge, __("PURGED") },
-				{ WA::Downgrade, __("DOWNGRADED") },
-				{ WA::Configure, __("CONFIGURED") },
-				{ WA::Deconfigure, __("DECONFIGURED") },
-				{ WA::ProcessTriggers, __("TRIGGER-PROCESSED") },
+			const map< WA::Type, string > actionNames = {
+				{ WA::Install, __("will be installed") },
+				{ WA::Remove, __("will be removed") },
+				{ WA::Upgrade, __("will be upgraded") },
+				{ WA::Purge, __("will be purged") },
+				{ WA::Downgrade, __("will be downgraded") },
+				{ WA::Configure, __("will be configured") },
+				{ WA::Deconfigure, __("will be deconfigured") },
+				{ WA::ProcessTriggers, __("will have triggers processed") },
+				{ fakeNotPolicyVersionAction, __("will have a not preferred version") },
+				{ fakeAutoRemove, __("are no longer needed and thus will be auto-removed") },
+				{ fakeAutoPurge, __("are no longer needed and thus will be auto-purged") },
 			};
 			cout << endl;
 
-			static const WA::Type actionTypesInOrder[] = { WA::Install, WA::Upgrade, WA::Remove,
+			vector< WA::Type > actionTypesInOrder = { WA::Install, WA::Upgrade, WA::Remove,
 					WA::Purge, WA::Downgrade, WA::Configure, WA::ProcessTriggers, WA::Deconfigure };
-
-			for (size_t i = 0; i < sizeof(actionTypesInOrder) / sizeof(WA::Type); ++i)
+			if (showNotPreferred)
 			{
-				const WA::Type& actionType = actionTypesInOrder[i];
+				actionTypesInOrder.push_back(fakeNotPolicyVersionAction);
+			}
+			actionTypesInOrder.push_back(fakeAutoRemove);
+			actionTypesInOrder.push_back(fakeAutoPurge);
 
-				const Resolver::SuggestedPackages& actionSuggestedPackages = actionsPreview->groups[actionType];
-
+			for (const WA::Type& actionType: actionTypesInOrder)
+			{
+				auto actionSuggestedPackages = getSuggestedPackagesByAction(cache,
+						offer, actionsPreview, actionType);
 				if (actionSuggestedPackages.empty())
 				{
-					continue; // don't print empty lists
+					continue;
+				}
+
+				if (actionType != fakeNotPolicyVersionAction)
+				{
+					actionCount += actionSuggestedPackages.size();
 				}
 
 				const string& actionName = actionNames.find(actionType)->second;
-				cout << sf(__("The following %u packages will be %s:"),
-						actionSuggestedPackages.size(), actionName.c_str()) << endl << endl;
 
-				FORIT(it, actionSuggestedPackages)
+				if (showSummary)
 				{
-					++actionCount;
-
-					const string& packageName = it->first;
-					cout << packageName;
-					if (actionType == WA::Remove || actionType == WA::Purge)
-					{
-						if (cache->isAutomaticallyInstalled(packageName))
-						{
-							cout << "(a)";
-						}
-					}
-
-					if (showVersions)
-					{
-						showVersion(cache, packageName, it->second);
-					}
-
-					if (showSizeChanges)
-					{
-						showSizeChange(unpackedSizesPreview[packageName]);
-					}
-
-					if (showVersions || showSizeChanges || showReasons)
-					{
-						cout << endl; // put newline
-					}
-					else
-					{
-						cout << ' '; // put a space between package names
-					}
-
-					if (showReasons)
-					{
-						showReason(it->second);
-					}
+					addActionToSummary(*cache, actionType, actionName, actionSuggestedPackages,
+							actionsPreview->autoFlagChanges, colorizer, &summaryStream);
 				}
-				if (!showVersions && !showSizeChanges && !showReasons)
+				if (!showDetails)
 				{
-					cout << endl;
+					continue;
 				}
-				cout << endl;
+
+				cout << format2(__("The following packages %s:"),
+						colorizeActionName(colorizer, actionName, actionType)) << endl << endl;
+
+				showPackageChanges(*config, *cache, colorizer, actionType, actionSuggestedPackages,
+						actionsPreview->autoFlagChanges, unpackedSizesPreview);
 			}
+
+			showUnsatisfiedSoftDependencies(offer, showDetails, &summaryStream);
 		};
 
 		// nothing to do maybe?
 		if (actionCount == 0)
 		{
-			return Resolver::UserAnswer::Accept;
+			thereIsNothingToDo = true;
+			return Resolver::UserAnswer::Abandon;
 		}
 
-		showUnsatisfiedSoftDependencies(offer);
+		if (showSummary)
+		{
+			cout << __("Action summary:") << endl << summaryStream.str() << endl;
+			summaryStream.clear();
+		}
 
 		bool isDangerousAction = false;
 		if (!config->getBool("cupt::console::allow-untrusted"))
@@ -702,8 +1078,8 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 	return result;
 }
 
-void parseManagementOptions(Context& context, vector< string >& packageExpressions,
-		bool& showVersions, bool& showSizeChanges)
+void parseManagementOptions(Context& context, ManagePackages::Mode mode,
+		vector< string >& packageExpressions, bool& showNotPreferred)
 {
 	bpo::options_description options;
 	options.add_options()
@@ -715,8 +1091,15 @@ void parseManagementOptions(Context& context, vector< string >& packageExpressio
 		("show-versions,V", "")
 		("show-size-changes,Z", "")
 		("show-reasons,D", "")
+		("show-archives,A", "")
+		("show-codenames,N", "")
+		("show-components,C", "")
 		("show-deps", "")
+		("show-not-preferred", "")
+		("show-vendors,O", "")
 		("download-only,d", "")
+		("summary-only", "")
+		("no-summary", "")
 		("assume-yes", "")
 		("yes,y", "");
 
@@ -724,7 +1107,7 @@ void parseManagementOptions(Context& context, vector< string >& packageExpressio
 	auto extraParser = [](const string& input) -> pair< string, string >
 	{
 		const set< string > actionModifierOptionNames = {
-			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy",
+			"--install", "--remove", "--purge", "--satisfy", "--unsatisfy", "--iii"
 			"--markauto", "--unmarkauto"
 		};
 		if (actionModifierOptionNames.count(input))
@@ -752,10 +1135,14 @@ void parseManagementOptions(Context& context, vector< string >& packageExpressio
 	{
 		config->setScalar("cupt::console::assume-yes", "yes");
 	}
+
 	if (variables.count("show-reasons") || variables.count("show-deps"))
 	{
-		config->setScalar("cupt::resolver::track-reasons", "yes");
+		config->setScalar("cupt::console::actions-preview::show-reasons", "yes");
 	}
+	// we now always need reason tracking
+	config->setScalar("cupt::resolver::track-reasons", "yes");
+
 	if (variables.count("no-install-recommends"))
 	{
 		config->setScalar("apt::install-recommends", "no");
@@ -772,9 +1159,51 @@ void parseManagementOptions(Context& context, vector< string >& packageExpressio
 	{
 		config->setScalar("cupt::resolver::auto-remove", "no");
 	}
+	if (variables.count("summary-only"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-summary", "yes");
+		config->setScalar("cupt::console::actions-preview::show-details", "no");
+	}
+	if (variables.count("no-summary"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-summary", "no");
+		config->setScalar("cupt::console::actions-preview::show-details", "yes");
+	}
+	if (variables.count("show-versions"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-versions", "yes");
+	}
+	if (variables.count("show-size-changes"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-size-changes", "yes");
+	}
+	if (variables.count("show-archives"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-archives", "yes");
+	}
+	if (variables.count("show-codenames"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-codenames", "yes");
+	}
+	if (config->getBool("cupt::console::actions-preview::show-archives") &&
+			config->getBool("cupt::console::actions-preview::show-codenames"))
+	{
+		fatal2(__("options 'cupt::console::actions-preview::show-archives' and 'cupt::console::actions-preview::show-codenames' cannot be used together"));
+	}
+	if (variables.count("show-components"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-components", "yes");
+	}
+	if (variables.count("show-vendors"))
+	{
+		config->setScalar("cupt::console::actions-preview::show-vendors", "yes");
+	}
 
-	showVersions = variables.count("show-versions");
-	showSizeChanges = variables.count("show-size-changes");
+	string showNotPreferredConfigValue = config->getString("cupt::console::actions-preview::show-not-preferred");
+	showNotPreferred = variables.count("show-not-preferred") ||
+			showNotPreferredConfigValue == "yes" ||
+			((mode == ManagePackages::FullUpgrade || mode == ManagePackages::SafeUpgrade) &&
+					showNotPreferredConfigValue == "for-upgrades");
 }
 
 int managePackages(Context& context, ManagePackages::Mode mode)
@@ -787,13 +1216,11 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 		Version::parseInfoOnly = false;
 	}
 
-	Package::memoize = true;
 	Cache::memoize = true;
 
 	vector< string > packageExpressions;
-	bool showVersions;
-	bool showSizeChanges;
-	parseManagementOptions(context, packageExpressions, showVersions, showSizeChanges);
+	bool showNotPreferred;
+	parseManagementOptions(context, mode, packageExpressions, showNotPreferred);
 
 	unrollFileArguments(packageExpressions);
 
@@ -803,7 +1230,7 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 	{
 		if (packageExpressions.size() != 1)
 		{
-			fatal("exactly one argument (the snapshot name) should be specified");
+			fatal2(__("exactly one argument (the snapshot name) should be specified"));
 		}
 		snapshotName = packageExpressions[0];
 		packageExpressions.clear();
@@ -819,7 +1246,6 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 		vector< string > packageNameGlobsToReinstall;
 		if (mode == ManagePackages::Reinstall)
 		{
-			mode = ManagePackages::Install;
 			packageNameGlobsToReinstall = packageExpressions;
 		}
 
@@ -836,7 +1262,7 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 	{
 		if (!config->getString("cupt::resolver::external-command").empty())
 		{
-			fatal("using external resolver is not supported now");
+			fatal2(__("using an external resolver is not supported now"));
 		}
 		else
 		{
@@ -854,18 +1280,20 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 
 	cout << __("Scheduling requested actions... ") << endl;
 
-	preProcessMode(mode, config, *resolver);
+	preProcessMode(mode, *config, *resolver);
 
 	set< string > purgedPackageNames;
 	processPackageExpressions(config, cache, mode, *resolver, packageExpressions, purgedPackageNames);
 
 	cout << __("Resolving possible unmet dependencies... ") << endl;
 
-	bool addArgumentsFlag;
+	bool addArgumentsFlag, thereIsNothingToDo;
 	auto callback = generateManagementPrompt(config, cache, worker,
-			showVersions, showSizeChanges, purgedPackageNames, addArgumentsFlag);
+			showNotPreferred, purgedPackageNames, addArgumentsFlag, thereIsNothingToDo);
 
 	resolve:
+	addArgumentsFlag = false;
+	thereIsNothingToDo = false;
 	bool resolved = resolver->resolve(callback);
 	if (addArgumentsFlag && std::cin)
 	{
@@ -890,11 +1318,16 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 	// at this stage resolver has done its work, so to does not consume the RAM
 	resolver.reset();
 
-	if (resolved)
+	if (thereIsNothingToDo)
+	{
+		cout << __("Nothing to do.") << endl;
+		return 0;
+	}
+	else if (resolved)
 	{
 		// if some solution was found and user has accepted it
 
-		auto downloadProgress = getDownloadProgress(config);
+		auto downloadProgress = getDownloadProgress(*config);
 		cout << __("Performing requested actions:") << endl;
 		try
 		{
@@ -902,7 +1335,7 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 		}
 		catch (Exception&)
 		{
-			fatal("unable to do requested actions");
+			fatal2(__("unable to do requested actions"));
 		}
 		return 0;
 	}
@@ -915,6 +1348,11 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 
 int distUpgrade(Context& context)
 {
+	if (shellMode)
+	{
+		fatal2(__("'dist-upgrade' command cannot be run in the shell mode"));
+	}
+
 	{ // 1st stage: upgrading of package management tools
 		cout << __("[ upgrading package management tools ]") << endl;
 		cout << endl;
@@ -922,7 +1360,7 @@ int distUpgrade(Context& context)
 		context.unparsed.push_back("cupt");
 		if (managePackages(context, ManagePackages::Install) != 0)
 		{
-			fatal("upgrading of the package management tools failed");
+			fatal2(__("upgrading of the package management tools failed"));
 		}
 	}
 
@@ -940,7 +1378,7 @@ int distUpgrade(Context& context)
 			}
 		}
 		execvp(argv[0], argv);
-		fatal("upgrading the system failed: execvp failed: EEE");
+		fatal2e(__("%s() failed"), "execvp");
 	}
 	return 0; // unreachable due to exec
 }
@@ -956,7 +1394,7 @@ int updateReleaseAndIndexData(Context& context)
 
 	auto cache = context.getCache(false, false, false);
 
-	auto downloadProgress = getDownloadProgress(config);
+	auto downloadProgress = getDownloadProgress(*config);
 	Worker worker(config, cache);
 
 	// may throw exception
@@ -972,12 +1410,13 @@ int changeAutoInstalledState(Context& context, bool value)
 	auto variables = parseOptions(context, noOptions, arguments);
 
 	auto config = context.getConfig();
-	auto cache = context.getCache(false, false, false);
+	auto cache = context.getCache(false, false, true);
 
 	Worker worker(config, cache);
 
 	FORIT(packageNameIt, arguments)
 	{
+		getBinaryPackage(cache, *packageNameIt); // check that it exists
 		worker.setAutomaticallyInstalledFlag(*packageNameIt, value);
 	}
 
@@ -1016,17 +1455,17 @@ int cleanArchives(Context& context, bool leaveAvailable)
 		struct stat stat_structure;
 		if (lstat(path.c_str(), &stat_structure))
 		{
-			fatal("lstat() failed: '%s': EEE", path.c_str());
+			fatal2e(__("%s() failed: '%s'"), "lstat", path);
 		}
 		else
 		{
 			size_t size = stat_structure.st_size;
 			totalDeletedBytes += size;
-			cout << sf(__("Deleting '%s' <%s>..."), path.c_str(), humanReadableSizeString(size).c_str()) << endl;
+			cout << format2(__("Deleting '%s' <%s>..."), path, humanReadableSizeString(size)) << endl;
 			worker.deleteArchive(path);
 		}
 	}
-	cout << sf(__("Freed %s of disk space."), humanReadableSizeString(totalDeletedBytes).c_str()) << endl;
+	cout << format2(__("Freed %s of disk space."), humanReadableSizeString(totalDeletedBytes)) << endl;
 
 	cout << __("Deleting partial archives...") << endl;
 	worker.deletePartialArchives();

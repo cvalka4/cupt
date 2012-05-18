@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -67,14 +67,14 @@ void parseStatusSubstrings(const string& packageName, const string& input,
 		CHECK_WANT("hold", Hold)
 		CHECK_WANT("purge", Purge)
 		{ // else
-			fatal("malformed 'desired' status indicator (for package '%s')", packageName.c_str());
+			fatal2(__("malformed '%s' status indicator (for the package '%s')"), "desired", packageName);
 		}
 #undef CHECK_WANT
 	}
 
 	if (current.second == end)
 	{
-		fatal("no 'error' status indicator (for package '%s')", packageName.c_str());
+		fatal2(__("no '%s' status indicator (for the package '%s')"), "error", packageName);
 	}
 	current.first = ++current.second;
 	while (current.second != end && *current.second != ' ')
@@ -88,14 +88,14 @@ void parseStatusSubstrings(const string& packageName, const string& input,
 		CHECK_FLAG("hold", Hold)
 		CHECK_FLAG("hold-reinstreq", HoldAndReinstreq)
 		{ // else
-			fatal("malformed 'error' status indicator (for package '%s')", packageName.c_str());
+			fatal2(__("malformed '%s' status indicator (for the package '%s')"), "error", packageName);
 		}
 #undef CHECK_FLAG
 	}
 
 	if (current.second == end)
 	{
-		fatal("no 'status' status indicator (for package '%s')", packageName.c_str());
+		fatal2(__("no '%s' status indicator (for the package '%s')"), "status", packageName);
 	}
 	current.first = current.second + 1;
 	current.second = end;
@@ -112,7 +112,7 @@ void parseStatusSubstrings(const string& packageName, const string& input,
 		CHECK_STATUS("triggers-pending", TriggersPending)
 		CHECK_STATUS("triggers-awaited", TriggersAwaited)
 		{ // else
-			fatal("malformed 'status' status indicator (for package '%s')", packageName.c_str());
+			fatal2(__("malformed '%s' status indicator (for the package '%s')"), "status", packageName);
 		}
 	}
 }
@@ -149,7 +149,7 @@ void StateData::parseDpkgStatus()
 	shared_ptr< File > file(new File(path, "r", openError));
 	if (!openError.empty())
 	{
-		fatal("unable to open dpkg status file '%s': %s", path.c_str(), openError.c_str());
+		fatal2(__("unable to open the dpkg status file '%s': %s"), path, openError);
 	}
 
 	/*
@@ -206,9 +206,9 @@ void StateData::parseDpkgStatus()
 
 			if (!packageNameIsPresent)
 			{
-				fatal("no package name in the record");
+				fatal2(__("no package name in the record"));
 			}
-			shared_ptr< InstalledRecord > installedRecord(new InstalledRecord);
+			auto installedRecord = std::make_shared< InstalledRecord >();
 			parseStatusSubstrings(packageName, status, installedRecord);
 
 			if (packageHasFullEntryInfo(*installedRecord))
@@ -236,7 +236,7 @@ void StateData::parseDpkgStatus()
 	}
 	catch (Exception&)
 	{
-		fatal("error parsing system status file '%s'", path.c_str());
+		fatal2(__("error parsing the dpkg status file '%s'"), path);
 	}
 }
 
@@ -313,8 +313,8 @@ vector< string > State::getReinstallRequiredPackageNames() const
 }
 
 const string State::InstalledRecord::Status::strings[] = {
-	__("not installed"), __("unpacked"), __("half-configured"), __("half-installed"),
-	__("config files"), __("postinst failed"), __("removal failed"), __("installed")
+	N__("not installed"), N__("unpacked"), N__("half-configured"), N__("half-installed"),
+	N__("config files"), N__("postinst failed"), N__("removal failed"), N__("installed")
 };
 
 }

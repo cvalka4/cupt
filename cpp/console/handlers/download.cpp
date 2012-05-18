@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -28,13 +28,13 @@ using std::endl;
 #include <cupt/system/state.hpp>
 #include <cupt/download/manager.hpp>
 
-string getCodenameAndComponentString(const Version& version)
+string getCodenameAndComponentString(const Version& version, const string& baseUri)
 {
 	vector< string > parts;
 	FORIT(sourceIt, version.sources)
 	{
 		auto releaseInfo = sourceIt->release;
-		if (releaseInfo->baseUri.empty())
+		if (releaseInfo->baseUri != baseUri)
 		{
 			continue;
 		}
@@ -58,7 +58,7 @@ int downloadSourcePackage(Context& context)
 
 	if (arguments.empty())
 	{
-		fatal("no source package expressions specified");
+		fatal2(__("no source package expressions specified"));
 	}
 
 	if (!shellMode)
@@ -102,14 +102,11 @@ int downloadSourcePackage(Context& context)
 	{
 		auto versions = selectSourceVersionsWildcarded(cache, *argumentIt);
 
-		FORIT(it, versions)
+		for (const auto& version: versions)
 		{
-			const shared_ptr< const SourceVersion >& version = *it;
-
 			const string& packageName = version->packageName;
 			const string& versionString = version->versionString;
 
-			auto codenameAndComponentString = getCodenameAndComponentString(*version);
 			auto downloadInfo = version->getDownloadInfo();
 
 			FORIT(partIt, partsToDownload)
@@ -119,18 +116,33 @@ int downloadSourcePackage(Context& context)
 				{
 					const Version::FileRecord& record = *fileRecordIt;
 
-					Manager::DownloadEntity downloadEntity;
 					const string& filename = record.name;
 					if (*partIt == SourceVersion::FileParts::Dsc)
 					{
 						dscFilenames.push_back(filename); // for unpacking after
 					}
+
+					{ // exclude from downloading packages that are already present
+						decltype(cupt::messageFd) oldMessageFd = cupt::messageFd;
+						cupt::messageFd = -1; // don't print errors if any
+						try
+						{
+							if (record.hashSums.verify(filename))
+							{
+								continue;
+							}
+						}
+						catch (Exception&) {}
+						cupt::messageFd = oldMessageFd;
+					}
+
+					Manager::DownloadEntity downloadEntity;
 					FORIT(downloadInfoIt, downloadInfo)
 					{
 						string shortAlias = packageName + ' ' + SourceVersion::FileParts::strings[*partIt];
-						string longAlias = sf("%s %s %s %s %s", downloadInfoIt->baseUri.c_str(),
-								codenameAndComponentString.c_str(), packageName.c_str(), versionString.c_str(),
-								SourceVersion::FileParts::strings[*partIt].c_str());
+						string longAlias = format2("%s %s %s %s %s", downloadInfoIt->baseUri,
+								getCodenameAndComponentString(*version, downloadInfoIt->baseUri),
+								packageName, versionString, SourceVersion::FileParts::strings[*partIt]);
 						string uri = downloadInfoIt->baseUri + '/' +
 								downloadInfoIt->directory + '/' + filename;
 
@@ -145,7 +157,7 @@ int downloadSourcePackage(Context& context)
 						{
 							if (unlink(filename.c_str()) == -1)
 							{
-								warn("unable to delete file '%s': EEE", filename.c_str());
+								warn2e(__("unable to remove the file '%s'"), filename);
 							}
 							return __("hash sums mismatch");
 						}
@@ -160,12 +172,12 @@ int downloadSourcePackage(Context& context)
 
 
 	{ // downloading
-		auto downloadProgress = getDownloadProgress(config);
+		auto downloadProgress = getDownloadProgress(*config);
 		Manager downloadManager(config, downloadProgress);
 		auto downloadError = downloadManager.download(downloadEntities);
 		if (!downloadError.empty())
 		{
-			fatal("there were download errors");
+			fatal2(__("there were download errors"));
 		}
 	}; // make sure that download manager is already destroyed at this point
 
@@ -177,7 +189,7 @@ int downloadSourcePackage(Context& context)
 			string command = "dpkg-source -x " + *filenameIt;
 			if (::system(command.c_str()))
 			{
-				warn("dpkg-source on file '%s' failed", filenameIt->c_str());
+				warn2(__("dpkg-source on the file '%s' failed"), *filenameIt);
 			}
 		}
 	}
@@ -204,7 +216,7 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 
 	if (arguments.empty())
 	{
-		fatal("no binary package expressions specified");
+		fatal2(__("no binary package expressions specified"));
 	}
 
 	auto cache = context.getCache(false, !variables.count("installed-only"), true);
@@ -245,9 +257,8 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 	{
 		auto versions = selectBinaryVersionsWildcarded(cache, *argumentIt);
 
-		FORIT(versionIt, versions)
+		for (const auto& version: versions)
 		{
-			const shared_ptr< const BinaryVersion >& version = *versionIt;
 			string localTargetPath;
 			if (type == ChangelogOrCopyright::Changelog)
 			{
@@ -262,8 +273,8 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 			{
 				// there is a local changelog/copyright, display it
 				auto preparedCommand = (type == ChangelogOrCopyright::Changelog ? "zcat" : "cat");
-				auto result = ::system(sf("%s %s | %s",
-						preparedCommand, localTargetPath.c_str(), pagerProgram.c_str()).c_str());
+				auto result = ::system(format2("%s %s | %s",
+						preparedCommand, localTargetPath, pagerProgram).c_str());
 				// return non-zero code in case of some error
 				if (result)
 				{
@@ -313,7 +324,7 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 					char tempFilename[] = "cupt-download-XXXXXX";
 					if (mkstemp(tempFilename) == -1)
 					{
-						fatal("unable to create a temporary file: mkstemp failed: EEE");
+						fatal2e(__("%s() failed"), "mkstemp");
 					}
 
 					try
@@ -326,7 +337,7 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 
 						string downloadError;
 						{ // downloading
-							auto downloadProgress = getDownloadProgress(config);
+							auto downloadProgress = getDownloadProgress(*config);
 							Manager downloadManager(config, downloadProgress);
 							downloadError = downloadManager.download(
 									vector< Manager::DownloadEntity >{ downloadEntity });
@@ -334,7 +345,7 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 						}
 						if (!downloadError.empty())
 						{
-							fatal("there were download errors");
+							fatal2(__("there were download errors"));
 						}
 
 						auto viewResult = ::system((pagerProgram + ' ' + tempFilename).c_str());
@@ -342,7 +353,7 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 						// remove the file
 						if (unlink(tempFilename) == -1)
 						{
-							fatal("unable to delete file '%s': EEE", tempFilename);
+							fatal2e(__("unable to remove the file '%s'"), tempFilename);
 						}
 
 						// return non-zero code in case of some error
@@ -359,9 +370,8 @@ int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type ty
 				}
 				else
 				{
-					fatal("no info where to acquire %s for version '%s' of package '%s'",
-							typeString.c_str(), version->versionString.c_str(),
-							version->packageName.c_str());
+					fatal2(__("no info where to acquire %s for version '%s' of package '%s'"),
+							typeString, version->versionString, version->packageName);
 				}
 			}
 		}

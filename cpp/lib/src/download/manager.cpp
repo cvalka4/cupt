@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -38,9 +38,9 @@
 #include <cupt/download/progress.hpp>
 #include <cupt/download/method.hpp>
 #include <cupt/download/methodfactory.hpp>
-#include <cupt/pipe.hpp>
 
 #include <internal/common.hpp>
+#include <internal/pipe.hpp>
 
 namespace cupt {
 namespace internal {
@@ -49,6 +49,12 @@ using namespace cupt::download;
 
 typedef Manager::ExtendedUri ExtendedUri;
 
+struct InputMessage
+{
+	int sock;
+	vector< string > message;
+};
+
 using std::queue;
 using std::map;
 using std::multimap;
@@ -56,19 +62,21 @@ using std::set;
 using boost::lexical_cast;
 using std::make_pair;
 
+typedef queue< vector< string > > MessageQueue;
+
 static void sendSocketMessage(int socket, const vector< string >& message)
 {
 	auto compactedMessage = join("\1", message);
 	if (message.size() >= 0xFFFF)
 	{
-		fatal("internal error: sendSocketMessage: message size exceeded 64K");
+		fatal2i("sendSocketMessage: message size exceeded 64K");
 	}
 	uint16_t len = compactedMessage.size();
 
 	if (write(socket, &len, sizeof(len)) == -1 ||
 			write(socket, compactedMessage.c_str(), len) == -1)
 	{
-		fatal("unable to send socket message: EEE");
+		fatal2e(__("unable to send a socket message"));
 	}
 }
 
@@ -79,52 +87,44 @@ static void sendSocketMessage(Pipe& pipe, const vector< string >& message)
 
 static vector< string > receiveSocketMessage(int socket)
 {
-	string compactedMessage;
-
 	uint16_t len;
 	auto readResult = read(socket, &len, sizeof(len));
 	if (readResult == -1)
 	{
 		if (errno != ECONNRESET /* handled under */)
 		{
-			fatal("unable to receive socket message length: EEE");
+			fatal2e(__("unable to receive a socket message length"));
 		}
 	}
 	else if (readResult != sizeof(len) && readResult != 0)
 	{
-		fatal("unable to receive socket message length: partial message arrived");
+		fatal2(__("unable to receive a socket message length: %s"), __("partial message arrived"));
 	}
 
 	if (readResult == 0 || readResult == -1 /* connection reset */)
 	{
-		compactedMessage = "eof";
+		return { "eof" };
 	}
 	else
 	{
-		char* buf = new char[len];
+		char buf[0xFFFF]; // must be enough for reading max(uint16) bytes
 		readResult = read(socket, buf, len);
-		compactedMessage.assign(buf, len);
-		delete[] buf;
 		if (readResult == -1)
 		{
-			fatal("unable to receive socket message: EEE");
+			fatal2e(__("unable to receive a socket message"));
 		}
 		else if (readResult == 0)
 		{
-			fatal("unable to receive socket message: unexpected end of stream");
+			fatal2(__("unable to receive a socket message: %s"), __("unexpected end of stream"));
 		}
 		else if (readResult != len)
 		{
-			fatal("unable to receive socket message: partial message arrived");
+			fatal2(__("unable to receive a socket message: %s"), __("partial message arrived"));
 		}
-	}
 
-	auto result = split('\1', compactedMessage, true);
-	if (result.empty())
-	{
-		fatal("received an empty message from socket");
+		string compactedMessage(buf, len);
+		return split('\1', compactedMessage, true);
 	}
-	return result;
 }
 
 struct InnerDownloadElement
@@ -166,15 +166,16 @@ class ManagerImpl
 	map< string, size_t > sizes;
 
 	void finishPendingDownload(multimap< string, int >::iterator, const string&, bool);
-	void processFinalResult(Pipe& workerPipe, const vector< string >& params, bool debugging);
-	void processPreliminaryResult(Pipe& workerPipe, const vector< string >& params, bool debugging);
-	void processProgressMessage(Pipe& workerPipe, const vector< string >& params);
-	void proceedDownload(Pipe& workerPipe, const vector< string >& params, bool debugging);
-	void killPerformerBecauseOfWrongSize(Pipe& workerPipe, const string& uri,
+	void processFinalResult(MessageQueue&, const vector< string >& params, bool debugging);
+	void processPreliminaryResult(MessageQueue&, const vector< string >& params, bool debugging);
+	void processProgressMessage(MessageQueue&, const vector< string >& params);
+	void proceedDownload(MessageQueue&, const vector< string >& params, bool debugging);
+	void killPerformerBecauseOfWrongSize(MessageQueue&, const string& uri,
 			const string& actionName, const string& errorString);
 	void terminateDownloadProcesses();
 	void startNewDownload(const string& uri, const string& targetPath, int waiterSocket, bool debugging);
-	int pollAllSockets(const vector< int >& persistentSockets, set< int >& clientSockets,
+	InputMessage pollAllInput(MessageQueue& workerQueue,
+			const vector< int >& persistentSockets, set< int >& clientSockets,
 			bool exitFlag, bool debugging);
 	void worker();
 	string perform(const string& uri, const string& targetPath, int sock);
@@ -213,17 +214,17 @@ ManagerImpl::ManagerImpl(const shared_ptr< const Config >& config_, const shared
 	serverSocket = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (serverSocket == -1)
 	{
-		fatal("unable to open server socket: EEE");
+		fatal2e(__("unable to open the server socket"));
 	}
 	serverSocketAddress.sun_family = AF_UNIX;
 	strcpy(serverSocketAddress.sun_path, serverSocketPath.c_str());
 	if (bind(serverSocket, (sockaddr*)&serverSocketAddress, sizeof(sockaddr_un)) == -1)
 	{
-		fatal("unable to bind server socket to file '%s': EEE", serverSocketPath.c_str());
+		fatal2e(__("unable to bind the server socket to the file '%s'"), serverSocketPath);
 	}
 	if (listen(serverSocket, SOMAXCONN) == -1)
 	{
-		fatal("unable to make server socket on file '%s' listen for connections: EEE", serverSocketPath.c_str());
+		fatal2e(__("unable to make the server socket on the file '%s' listen for connections"), serverSocketPath);
 	}
 
 	parentPipe.reset(new Pipe("parent"));
@@ -231,7 +232,7 @@ ManagerImpl::ManagerImpl(const shared_ptr< const Config >& config_, const shared
 	auto pid = fork();
 	if (pid == -1)
 	{
-		fatal("unable to create download worker process: fork failed: EEE");
+		fatal2e(__("unable to create the download worker process: fork() failed"));
 	}
 
 	if (pid)
@@ -255,7 +256,7 @@ ManagerImpl::ManagerImpl(const shared_ptr< const Config >& config_, const shared
 
 			if (config->getBool("debug::downloader"))
 			{
-				debug("aborting download worker process because of exception");
+				debug2("aborting the download worker process because of the exception");
 			}
 
 			terminateDownloadProcesses();
@@ -277,28 +278,28 @@ ManagerImpl::~ManagerImpl()
 			int childExitStatus;
 			if (waitpid(workerPid, &childExitStatus, 0) == -1)
 			{
-				warn("unable to shutdown download worker process: waitpid failed: EEE");
+				warn2e(__("unable to shutdown the download worker process: waitpid() failed"));
 			}
 			else if (childExitStatus != 0)
 			{
-				warn("download worker process exited abnormally: %s",
-						getWaitStatusDescription(childExitStatus).c_str());
+				warn2(__("the download worker process exited abnormally: %s"),
+						getWaitStatusDescription(childExitStatus));
 			}
 		}
 		else
 		{
-			warn("download worker process aborted unexpectedly");
+			warn2(__("the download worker process aborted unexpectedly"));
 		}
 
 		// cleaning server socket
 		if (close(serverSocket) == -1)
 		{
-			warn("unable to close download server socket: EEE");
+			warn2e(__("unable to close the download server socket"));
 		}
 
 		if (unlink(serverSocketPath.c_str()) == -1)
 		{
-			warn("unable to delete download server socket file '%s': EEE", serverSocketPath.c_str());
+			warn2e(__("unable to remove the download server socket file '%s'"), serverSocketPath);
 		}
 	}
 }
@@ -312,7 +313,7 @@ void ManagerImpl::terminateDownloadProcesses()
 		{
 			if (errno != ESRCH)
 			{
-				warn("download manager: unable to terminate a performer process (pid '%d')", pid);
+				warn2(__("download manager: unable to terminate a performer process (pid '%d')"), pid);
 			}
 		}
 	}
@@ -333,18 +334,16 @@ void sendPingMessage(int)
 
 void enablePingTimer()
 {
-	// so, to avoid potential clash with simultaneously writing to workerPipe in a signal
-	// and in the processing thread, create another pipe
 	struct sigaction newAction;
 	newAction.sa_handler = sendPingMessage;
 	if (sigfillset(&newAction.sa_mask) == -1)
 	{
-		fatal("sigfillset failed: EEE");
+		fatal2e(__("%s() failed"), "sigfillset");
 	}
 	newAction.sa_flags = SA_RESTART;
 	if (sigaction(SIGALRM, &newAction, NULL) == -1)
 	{
-		fatal("unable to set up ALRM signal handler: sigaction failed: EEE");
+		fatal2e(__("%s() failed"), "sigaction");
 	}
 
 	struct itimerval timerStruct;
@@ -354,7 +353,7 @@ void enablePingTimer()
 	timerStruct.it_value.tv_usec = timerStruct.it_interval.tv_usec;
 	if (setitimer(ITIMER_REAL, &timerStruct, NULL) == -1)
 	{
-		fatal("unable to enable ALRM signal: setitimer failed: EEE");
+		fatal2e(__("%s() failed"), "setitimer");
 	}
 }
 
@@ -364,12 +363,12 @@ void disablePingTimer()
 	defaultAction.sa_handler = SIG_DFL;
 	if (sigemptyset(&defaultAction.sa_mask) == -1)
 	{
-		fatal("sigemptyset failed: EEE");
+		fatal2e(__("%s() failed"), "sigemptyset");
 	}
 	defaultAction.sa_flags = 0;
 	if (sigaction(SIGALRM, &defaultAction, NULL) == -1)
 	{
-		fatal("unable to clear ALRM signal handler: sigaction failed: EEE");
+		fatal2e(__("%s() failed"), "sigaction");
 	}
 
 	struct itimerval timerStruct;
@@ -379,31 +378,30 @@ void disablePingTimer()
 	timerStruct.it_value.tv_usec = 0;
 	if (setitimer(ITIMER_REAL, &timerStruct, NULL) == -1)
 	{
-		fatal("unable to disable ALRM signal: setitimer failed: EEE");
+		fatal2e(__("%s() failed"), "setitimer");
 	}
 }
 
-void ManagerImpl::processPreliminaryResult(Pipe& workerPipe,
+void ManagerImpl::processPreliminaryResult(MessageQueue& workerQueue,
 		const vector< string >& params, bool debugging)
 {
 	if (params.size() != 2) // uri, result
 	{
-		fatal("internal error: download manager: wrong parameter count for 'done' message");
+		fatal2i("download manager: wrong parameter count for 'done' message");
 	}
 	const string& uri = params[0];
 	const string& result = params[1];
 
 	if (debugging)
 	{
-		debug("preliminary download result: '%s': '%s'", uri.c_str(), result.c_str());
+		debug2("preliminary download result: '%s': '%s'", uri, result);
 	}
 	bool isDuplicatedDownload = false;
 
 	auto downloadInfoIt = activeDownloads.find(uri);
 	if (downloadInfoIt == activeDownloads.end())
 	{
-		fatal("internal error: download manager: received preliminary result for unexistent download, uri '%s'",
-				uri.c_str());
+		fatal2i("download manager: received preliminary result for unexistent download, uri '%s'", uri);
 	}
 	ActiveDownloadInfo& downloadInfo = downloadInfoIt->second;
 	sendSocketMessage(downloadInfo.waiterSocket,
@@ -412,12 +410,12 @@ void ManagerImpl::processPreliminaryResult(Pipe& workerPipe,
 	// cleanup after child
 	if (waitpid(downloadInfo.performerPid, NULL, 0) == -1)
 	{
-		fatal("waitpid on performer process failed: EEE");
+		fatal2e(__("waitpid on the performer process failed"));
 	}
 	downloadInfo.performerPipe.reset();
 
 	// update progress
-	sendSocketMessage(workerPipe, vector< string >{ "progress", uri, "pre-done" });
+	workerQueue.push({ "progress", uri, "pre-done" });
 }
 
 void ManagerImpl::finishPendingDownload(multimap< string, int >::iterator pendingDownloadIt,
@@ -429,8 +427,7 @@ void ManagerImpl::finishPendingDownload(multimap< string, int >::iterator pendin
 
 	if (debugging)
 	{
-		debug("final download result for duplicated request: '%s': %s",
-				uri.c_str(), result.c_str());
+		debug2("final download result for a duplicated request: '%s': %s", uri, result);
 	}
 	auto waiterSocket = pendingDownloadIt->second;
 	sendSocketMessage(waiterSocket,
@@ -439,19 +436,19 @@ void ManagerImpl::finishPendingDownload(multimap< string, int >::iterator pendin
 	pendingDuplicates.erase(pendingDownloadIt);
 }
 
-void ManagerImpl::processFinalResult(Pipe& workerPipe,
+void ManagerImpl::processFinalResult(MessageQueue& workerQueue,
 		const vector< string >& params, bool debugging)
 {
 	if (params.size() != 2) // uri, result
 	{
-		fatal("internal error: download manager: wrong parameter count for 'done-ack' message");
+		fatal2i("download manager: wrong parameter count for 'done-ack' message");
 	}
 
 	const string& uri = params[0];
 	const string& result = params[1];
 	if (debugging)
 	{
-		debug("final download result: '%s': '%s'", uri.c_str(), result.c_str());
+		debug2("final download result: '%s': '%s'", uri, result);
 	}
 
 	// put the query to the list of finished ones
@@ -459,7 +456,7 @@ void ManagerImpl::processFinalResult(Pipe& workerPipe,
 
 	if (debugging)
 	{
-		debug("started checking pending queue");
+		debug2("started checking pending queue");
 	}
 	{ // answering on duplicated requests if any
 
@@ -472,55 +469,54 @@ void ManagerImpl::processFinalResult(Pipe& workerPipe,
 	}
 	if (debugging)
 	{
-		debug("finished checking pending queue");
+		debug2("finished checking pending queue");
 	}
 
 	auto downloadInfoIt = activeDownloads.find(uri);
 	if (downloadInfoIt == activeDownloads.end())
 	{
-		fatal("internal error: download manager: received final result for unexistent download, uri '%s'",
-				uri.c_str());
+		fatal2i("download manager: received final result for unexistent download, uri '%s'", uri);
 	}
 	activeDownloads.erase(downloadInfoIt);
 
 	// update progress
-	sendSocketMessage(workerPipe, vector< string >{ "progress", uri, "done", result });
+	workerQueue.push({ "progress", uri, "done", result });
 
 	// schedule next download if any
-	sendSocketMessage(workerPipe, vector< string >{ "pop-download" });
+	workerQueue.push({ "pop-download" });
 }
 
-void ManagerImpl::killPerformerBecauseOfWrongSize(Pipe& workerPipe,
+void ManagerImpl::killPerformerBecauseOfWrongSize(MessageQueue& workerQueue,
 		const string& uri, const string& actionName, const string& errorString)
 {
 	// so, this download don't make sense
 	auto downloadInfoIt = activeDownloads.find(uri);
 	if (downloadInfoIt == activeDownloads.end())
 	{
-		fatal("internal error: download manager: received '%s' submessage for unexistent download, uri '%s'",
-				actionName.c_str(), uri.c_str());
+		fatal2i("download manager: received '%s' submessage for unexistent download, uri '%s'",
+				actionName, uri);
 	}
 	ActiveDownloadInfo& downloadInfo = downloadInfoIt->second;
 	// rest in peace, young process
 	if (kill(downloadInfo.performerPid, SIGTERM) == -1)
 	{
-		fatal("unable to kill process %u: EEE", downloadInfo.performerPid);
+		fatal2e(__("unable to kill the process %u"), downloadInfo.performerPid);
 	}
 	// process it as failed
-	sendSocketMessage(workerPipe, vector< string >{ "done", uri, errorString });
+	workerQueue.push({ "done", uri, errorString });
 
 	const string& path = downloadInfo.targetPath;
 	if (unlink(path.c_str()) == -1)
 	{
-		warn("unable to delete file '%s': EEE", path.c_str());
+		warn2e(__("unable to remove the file '%s'"), path);
 	}
 }
 
-void ManagerImpl::processProgressMessage(Pipe& workerPipe, const vector< string >& params)
+void ManagerImpl::processProgressMessage(MessageQueue& workerQueue, const vector< string >& params)
 {
 	if (params.size() < 2) // uri, action name
 	{
-		fatal("internal error: download manager: wrong parameter count for 'progress' message");
+		fatal2i("download manager: wrong parameter count for 'progress' message");
 	}
 
 	const string& uri = params[0];
@@ -533,15 +529,15 @@ void ManagerImpl::processProgressMessage(Pipe& workerPipe, const vector< string 
 		// now compare them strictly
 		if (params.size() != 3)
 		{
-			fatal("internal error: download manager: wrong parameter count for 'progress' message, 'expected-size' submessage");
+			fatal2i("download manager: wrong parameter count for 'progress' message, 'expected-size' submessage");
 		}
 
 		auto expectedSize = lexical_cast< size_t >(params[2]);
 		if (expectedSize != downloadSizeIt->second)
 		{
-			auto errorString = sf(__("invalid expected size: expected '%zu', got '%zu'"),
+			auto errorString = format2(__("invalid expected size: expected '%zu', got '%zu'"),
 					downloadSizeIt->second, expectedSize);
-			killPerformerBecauseOfWrongSize(workerPipe, uri, actionName, errorString);
+			killPerformerBecauseOfWrongSize(workerQueue, uri, actionName, errorString);
 		}
 	}
 	else
@@ -551,14 +547,14 @@ void ManagerImpl::processProgressMessage(Pipe& workerPipe, const vector< string 
 			// checking for overflows
 			if (params.size() != 4)
 			{
-				fatal("internal error: download manager: wrong parameter count for 'progress' message, 'downloading' submessage");
+				fatal2i("download manager: wrong parameter count for 'progress' message, 'downloading' submessage");
 			}
 			auto currentSize = lexical_cast< size_t >(params[2]);
 			if (currentSize > downloadSizeIt->second)
 			{
-				auto errorString = sf(__("downloaded more than expected: expected '%zu', downloaded '%zu'"),
+				auto errorString = format2(__("downloaded more than expected: expected '%zu', downloaded '%zu'"),
 						downloadSizeIt->second, currentSize);
-				killPerformerBecauseOfWrongSize(workerPipe, uri, actionName, errorString);
+				killPerformerBecauseOfWrongSize(workerQueue, uri, actionName, errorString);
 				return;
 			}
 		}
@@ -567,16 +563,16 @@ void ManagerImpl::processProgressMessage(Pipe& workerPipe, const vector< string 
 	}
 }
 
-void ManagerImpl::proceedDownload(Pipe& workerPipe, const vector< string >& params, bool debugging)
+void ManagerImpl::proceedDownload(MessageQueue& workerQueue, const vector< string >& params, bool debugging)
 {
 	if (params.size() != 3) // uri, targetPath, waiterSocket
 	{
-		fatal("internal error: download manager: wrong parameter count for 'progress' message");
+		fatal2i("download manager: wrong parameter count for 'progress' message");
 	}
 	const string& uri = params[0];
 	if (debugging)
 	{
-		debug("processing download '%s'", uri.c_str());
+		debug2("processing download '%s'", uri);
 	}
 
 	const int waiterSocket = lexical_cast< int >(params[2]);
@@ -591,17 +587,17 @@ void ManagerImpl::proceedDownload(Pipe& workerPipe, const vector< string >& para
 			// and immediately process it
 			finishPendingDownload(insertIt, result, debugging);
 
-			sendSocketMessage(workerPipe, vector< string >{ "pop-download" });
+			workerQueue.push({ "pop-download" });
 			return;
 		}
 		else if (activeDownloads.count(uri))
 		{
 			if (debugging)
 			{
-				debug("pushed '%s' to pending queue", uri.c_str());
+				debug2("pushed '%s' to pending queue", uri);
 			}
 			pendingDuplicates.insert(make_pair(uri, waiterSocket));
-			sendSocketMessage(workerPipe, vector< string >{ "pop-download" });
+			workerQueue.push({ "pop-download" });
 			return;
 		}
 		else if (activeDownloads.size() >= (size_t)maxSimultaneousDownloadsAllowed)
@@ -609,7 +605,7 @@ void ManagerImpl::proceedDownload(Pipe& workerPipe, const vector< string >& para
 			// put the query on hold
 			if (debugging)
 			{
-				debug("put '%s' on hold", uri.c_str());
+				debug2("put '%s' on hold", uri);
 			}
 			OnHoldRecord holdRecord;
 			holdRecord.uri = uri;
@@ -629,7 +625,7 @@ void ManagerImpl::startNewDownload(const string& uri, const string& targetPath,
 {
 	if (debugging)
 	{
-		debug("starting download '%s'", uri.c_str());
+		debug2("starting download '%s'", uri);
 	}
 	ActiveDownloadInfo& downloadInfo = activeDownloads[uri]; // new element
 	downloadInfo.targetPath = targetPath;
@@ -640,7 +636,7 @@ void ManagerImpl::startNewDownload(const string& uri, const string& targetPath,
 	auto downloadPid = fork();
 	if (downloadPid == -1)
 	{
-		fatal("unable to create performer process: fork failed: EEE");
+		fatal2e(__("unable to create a performer process: fork() failed"));
 	}
 	downloadInfo.performerPid = downloadPid;
 
@@ -674,9 +670,17 @@ void ManagerImpl::startNewDownload(const string& uri, const string& targetPath,
 	}
 }
 
-int ManagerImpl::pollAllSockets(const vector< int >& persistentSockets,
-		set< int >& clientSockets, bool exitFlag, bool debugging)
+InputMessage ManagerImpl::pollAllInput(MessageQueue& workerQueue,
+		const vector< int >& persistentSockets, set< int >& clientSockets,
+		bool exitFlag, bool debugging)
 {
+	if (!workerQueue.empty())
+	{
+		auto message = workerQueue.front();
+		workerQueue.pop();
+		return { INT_MAX, std::move(message) };
+	}
+
 	auto newInputPollFd = [](int sock) -> pollfd
 	{
 		pollfd pollFd;
@@ -713,7 +717,7 @@ int ManagerImpl::pollAllSockets(const vector< int >& persistentSockets,
 		}
 		else
 		{
-			fatal("unable to poll worker loop sockets: EEE");
+			fatal2e(__("unable to poll worker loop sockets"));
 		}
 	}
 
@@ -731,19 +735,19 @@ int ManagerImpl::pollAllSockets(const vector< int >& persistentSockets,
 			sock = accept(sock, NULL, NULL);
 			if (sock == -1)
 			{
-				fatal("unable to accept new socket connection: EEE");
+				fatal2e(__("unable to accept new socket connection"));
 			}
 			if (debugging)
 			{
-				debug("accepted new connection");
+				debug2("accepted new connection");
 			}
 			clientSockets.insert(sock);
 		}
 
-		return sock;
+		return { sock, receiveSocketMessage(sock) };
 	}
 
-	return 0; // exitFlag is set, no more messages to read
+	return { 0, {} }; // exitFlag is set, no more messages to read
 }
 
 void doNothing(int)
@@ -756,12 +760,12 @@ void makeSyscallsRestartable()
 	action.sa_handler = doNothing;
 	if (sigemptyset(&action.sa_mask) == -1)
 	{
-		fatal("sigemptyset failed: EEE");
+		fatal2e(__("%s() failed"), "sigemptyset");
 	}
 	action.sa_flags = SA_RESTART;
 	if (sigaction(SIGCHLD, &action, NULL) == -1)
 	{
-		fatal("download worker: making system calls restartable: sigaction failed: EEE");
+		fatal2e(__("%s() failed"), "sigaction");
 	}
 }
 
@@ -770,11 +774,10 @@ void ManagerImpl::worker()
 	bool debugging = config->getBool("debug::downloader");
 	if (debugging)
 	{
-		debug("download worker process started");
+		debug2("download worker process started");
 	}
 
 	parentPipe->useAsReader();
-	Pipe workerPipe("worker's own");
 
 	bool exitFlag = false;
 
@@ -782,16 +785,19 @@ void ManagerImpl::worker()
 	enablePingTimer();
 
 	const vector< int > persistentSockets = {
-			workerPipe.getReaderFd(), pingPipe.getReaderFd(), parentPipe->getReaderFd(), serverSocket
+			pingPipe.getReaderFd(), parentPipe->getReaderFd(), serverSocket
 	};
 	set< int > clientSockets;
 
+	MessageQueue workerQueue;
+
 	// while caller may set exit flag, we should continue processing as long as
 	// something is pending in internal queue
-	int sock;
-	while ((sock = pollAllSockets(persistentSockets, clientSockets, exitFlag, debugging)))
+	InputMessage inputMessage;
+	while (inputMessage = pollAllInput(workerQueue, persistentSockets, clientSockets, exitFlag, debugging), inputMessage.sock)
 	{
-		auto params = receiveSocketMessage(sock);
+		auto sock = inputMessage.sock;
+		auto& params = inputMessage.message;
 		auto command = params[0];
 		params.erase(params.begin());
 
@@ -799,7 +805,7 @@ void ManagerImpl::worker()
 		{
 			if (debugging)
 			{
-				debug("exit scheduled");
+				debug2("exit scheduled");
 			}
 			exitFlag = true;
 		}
@@ -808,7 +814,7 @@ void ManagerImpl::worker()
 			// the current socket reported EOF
 			if (debugging)
 			{
-				debug("eof has been reported");
+				debug2("eof has been reported");
 			}
 			if (sock == parentPipe->getReaderFd())
 			{
@@ -827,7 +833,7 @@ void ManagerImpl::worker()
 					//
 					// call processPreliminaryResult() immediately to remove sock from
 					// the list of polled sockets
-					processPreliminaryResult(workerPipe, vector< string > {
+					processPreliminaryResult(workerQueue, vector< string > {
 							activeDownloadIt->first, "download method exited unexpectedly" }, debugging);
 					isPerformerSocket = true;
 					break;
@@ -839,7 +845,7 @@ void ManagerImpl::worker()
 				clientSockets.erase(sock); // if it is a client socket
 				if (close(sock) == -1)
 				{
-					fatal("unable to close socket: EEE");
+					fatal2e(__("unable to close the client socket"));
 				}
 			}
 		}
@@ -848,21 +854,20 @@ void ManagerImpl::worker()
 			// new query appeared
 			if (params.size() != 2) // uri, target path
 			{
-				fatal("internal error: download manager: wrong parameter count for 'download' message");
+				fatal2i("download manager: wrong parameter count for 'download' message");
 			}
 			const string& uri = params[0];
 			if (debugging)
 			{
-				debug("download request: '%s'", uri.c_str());
+				debug2("download request: '%s'", uri);
 			}
-			sendSocketMessage(workerPipe, vector< string > {
-					"proceed-download", uri, params[1], lexical_cast< string >(sock) });
+			workerQueue.push({ "proceed-download", uri, params[1], lexical_cast< string >(sock) });
 		}
 		else if (command == "set-download-size")
 		{
 			if (params.size() != 2) // uri, size
 			{
-				fatal("internal error: download manager: wrong parameter count for 'set-download-size' message");
+				fatal2i("download manager: wrong parameter count for 'set-download-size' message");
 			}
 			const string& uri = params[0];
 			const size_t size = lexical_cast< size_t >(params[1]);
@@ -871,16 +876,16 @@ void ManagerImpl::worker()
 		else if (command == "done")
 		{
 			// some query finished, we have preliminary result for it
-			processPreliminaryResult(workerPipe, params, debugging);
+			processPreliminaryResult(workerQueue, params, debugging);
 		}
 		else if (command == "done-ack")
 		{
 			// this is final ACK from download with final result
-			processFinalResult(workerPipe, params, debugging);
+			processFinalResult(workerQueue, params, debugging);
 		}
 		else if (command == "progress")
 		{
-			processProgressMessage(workerPipe, params);
+			processProgressMessage(workerQueue, params);
 		}
 		else if (command == "ping")
 		{
@@ -904,7 +909,7 @@ void ManagerImpl::worker()
 					{
 						goto do_poll;
 					}
-					fatal("download worker: polling waiter socket failed: EEE");
+					fatal2e(__("download worker: polling the waiter socket failed"));
 				}
 				if (!pollResult)
 				{
@@ -922,9 +927,9 @@ void ManagerImpl::worker()
 				onHold.pop();
 				if (debugging)
 				{
-					debug("enqueue '%s' from hold", next.uri.c_str());
+					debug2("enqueue '%s' from hold", next.uri);
 				}
-				sendSocketMessage(workerPipe, vector< string >{ "proceed-download",
+				workerQueue.push({ "proceed-download",
 						next.uri, next.targetPath, lexical_cast< string >(next.waiterSocket) });
 			}
 		}
@@ -932,7 +937,7 @@ void ManagerImpl::worker()
 		{
 			if (params.size() != 2)
 			{
-				fatal("internal error: download manager: wrong parameter count for 'set-long-alias' message");
+				fatal2i("download manager: wrong parameter count for 'set-long-alias' message");
 			}
 			progress->setLongAliasForUri(params[0], params[1]);
 		}
@@ -940,17 +945,17 @@ void ManagerImpl::worker()
 		{
 			if (params.size() != 2)
 			{
-				fatal("internal error: download manager: wrong parameter count for 'set-short-alias' message");
+				fatal2i("download manager: wrong parameter count for 'set-short-alias' message");
 			}
 			progress->setShortAliasForUri(params[0], params[1]);
 		}
 		else if (command == "proceed-download")
 		{
-			proceedDownload(workerPipe, params, debugging);
+			proceedDownload(workerQueue, params, debugging);
 		}
 		else
 		{
-			fatal("internal error: download manager: invalid worker command '%s'", command.c_str());
+			fatal2i("download manager: invalid worker command '%s'", command);
 		}
 	}
 	disablePingTimer();
@@ -959,7 +964,7 @@ void ManagerImpl::worker()
 
 	if (debugging)
 	{
-		debug("download worker process finished");
+		debug2("download worker process finished");
 	}
 	_exit(0);
 	return; // unreachable :)
@@ -983,11 +988,11 @@ map< string, InnerDownloadElement > ManagerImpl::convertEntitiesToDownloads(
 		const string& targetPath = entityIt->targetPath;
 		if (targetPath.empty())
 		{
-			fatal("passed a download entity with empty target path");
+			fatal2(__("passed a download entity with an empty target path"));
 		}
 		if (result.count(targetPath))
 		{
-			fatal("passed distinct download entities with the same target path '%s'", targetPath.c_str());
+			fatal2(__("passed distinct download entities with the same target path '%s'"), targetPath);
 		}
 		InnerDownloadElement& element = result[targetPath];
 
@@ -1029,13 +1034,12 @@ static void checkSocketForTimeout(int sock)
 		}
 		else
 		{
-			fatal("download client: polling client socket failed: EEE");
+			fatal2e(__("download client: polling the client socket failed"));
 		}
 	}
 	else if (!pollResult)
 	{
-		// time is out
-		fatal("download client: download server socket is timed out");
+		fatal2(__("download client: the download server socket timed out"));
 	}
 }
 
@@ -1051,7 +1055,7 @@ string ManagerImpl::download(const vector< Manager::DownloadEntity >& entities)
 				uris.push_back(extendedUriIt->uri);
 			}
 
-			simulate("downloading: %s", join(" | ", uris).c_str());
+			simulate2("downloading: %s", join(" | ", uris));
 		}
 		return "";
 	}
@@ -1063,11 +1067,11 @@ string ManagerImpl::download(const vector< Manager::DownloadEntity >& entities)
 	auto sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock == -1)
 	{
-		fatal("unable to open client socket: EEE");
+		fatal2e(__("unable to open a client socket"));
 	}
 	if (connect(sock, (sockaddr*)&serverSocketAddress, sizeof(sockaddr_un)) == -1)
 	{
-		fatal("unable to connect to server socket: EEE");
+		fatal2e(__("unable to connect to the server socket"));
 	}
 
 	auto scheduleDownload = [&sock, &downloads, &waitedUriToTargetPath](const string& targetPath)
@@ -1115,14 +1119,14 @@ string ManagerImpl::download(const vector< Manager::DownloadEntity >& entities)
 		}
 		if (params.size() != 3)
 		{
-			fatal("internal error: download client: wrong parameter count for download result message");
+			fatal2i("download client: wrong parameter count for download result message");
 		}
 		const string& uri = params[0];
 
 		auto waitedUriIt = waitedUriToTargetPath.find(uri);
 		if (waitedUriIt == waitedUriToTargetPath.end())
 		{
-			fatal("internal error: download client: received unknown uri '%s'", uri.c_str());
+			fatal2i("download client: received unknown uri '%s'", uri);
 		}
 
 		const string targetPath = waitedUriIt->second;
@@ -1143,11 +1147,11 @@ string ManagerImpl::download(const vector< Manager::DownloadEntity >& entities)
 			}
 			catch (std::exception& e)
 			{
-				errorString = sf(__("postaction raised an exception '%s'"), e.what());
+				errorString = format2(__("the postprocessing action raised an exception '%s'"), e.what());
 			}
 			catch (...)
 			{
-				errorString = __("postaction raised an exception");
+				errorString = __("the postprocessing action raised an exception");
 			}
 		}
 
@@ -1176,7 +1180,7 @@ string ManagerImpl::download(const vector< Manager::DownloadEntity >& entities)
 
 	if (close(sock) == -1)
 	{
-		fatal("unable to close client socket: EEE");
+		fatal2e(__("unable to close the client socket"));
 	}
 
 	return result;

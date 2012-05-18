@@ -121,21 +121,23 @@ string getPathOfIndexList(const Config& config, const IndexEntry& entry)
 	return basePath + "_" + indexListSuffix;
 }
 
-vector< Cache::IndexDownloadRecord > getDownloadInfoOfIndexList(
-		const Config& config, const IndexEntry& indexEntry)
+static vector< FileDownloadRecord > getDownloadInfoFromRelease(
+		const Config& config, const IndexEntry& indexEntry, const string& suffix)
 {
 	auto baseUri = getUriOfIndexEntry(indexEntry);
-	auto indexListSuffix = getIndexListSuffix(config, indexEntry, '/');
+	// TODO: make cachefiles::getAlias* functions
+	auto alias = indexEntry.uri + ' ' + indexEntry.distribution;
 
-	vector< Cache::IndexDownloadRecord > result;
-	{ // reading
+	vector< FileDownloadRecord > result;
+
+	try
+	{
 		string openError;
 		auto releaseFilePath = getPathOfReleaseList(config, indexEntry);
 		File releaseFile(releaseFilePath, "r", openError);
 		if (!openError.empty())
 		{
-			fatal("unable to open release file '%s': %s",
-					releaseFilePath.c_str(), openError.c_str());
+			fatal2(__("unable to open the file '%s': %s"), releaseFilePath, openError);
 		}
 
 		HashSums::Type currentHashSumType = HashSums::Count;
@@ -156,24 +158,22 @@ vector< Cache::IndexDownloadRecord > getDownloadInfoOfIndexList(
 			{
 				currentHashSumType = HashSums::SHA256;
 			}
-			else if (line.find(indexListSuffix) != string::npos)
+			else if (line.find(suffix) != string::npos)
 			{
 				if (currentHashSumType == HashSums::Count)
 				{
-					fatal("release line '%s' without previous hash sum declaration at release file '%s'",
-								line.c_str(), releaseFilePath.c_str());
+					fatal2(__("no hash sum declarations before the line '%s'"), line);
 				}
 				static sregex hashSumsLineRegex = sregex::compile("\\s([[:xdigit:]]+)\\s+(\\d+)\\s+(.*)");
 				if (!regex_match(line, m, hashSumsLineRegex))
 				{
-					fatal("malformed release line '%s' at file '%s'",
-								line.c_str(), releaseFilePath.c_str());
+					fatal2(__("malformed line '%s'"), line);
 				}
 
 				string name = m[3];
-				if (name.compare(0, indexListSuffix.size(), indexListSuffix) != 0)
+				if (name.compare(0, suffix.size(), suffix) != 0)
 				{
-					continue; // doesn't start with indexListSuffix
+					continue; // doesn't start with suffix
 				}
 
 				// filling result structure
@@ -190,26 +190,36 @@ vector< Cache::IndexDownloadRecord > getDownloadInfoOfIndexList(
 				}
 				if (!foundRecord)
 				{
-					Cache::IndexDownloadRecord& record =
-							(result.push_back(Cache::IndexDownloadRecord()), *(result.rbegin()));
+					FileDownloadRecord& record =
+							(result.push_back(FileDownloadRecord()), *(result.rbegin()));
 					record.uri = uri;
 					record.size = string2uint32(m[2]);
 					record.hashSums[currentHashSumType] = m[1];
 				}
 			}
 		}
-	}
-
-	// checks
-	FORIT(recordIt, result)
-	{
-		if (recordIt->hashSums.empty())
+		// checks
+		FORIT(recordIt, result)
 		{
-			fatal("no hash sums defined for index list URI '%s'", recordIt->uri.c_str());
+			if (recordIt->hashSums.empty())
+			{
+				fatal2(__("no hash sums defined for the index URI '%s'"), recordIt->uri);
+			}
 		}
+	}
+	catch (Exception&)
+	{
+		fatal2("unable to parse the release '%s'", alias);
 	}
 
 	return result;
+}
+
+vector< FileDownloadRecord > getDownloadInfoOfIndexList(
+		const Config& config, const IndexEntry& indexEntry)
+{
+	return getDownloadInfoFromRelease(config, indexEntry,
+			getIndexListSuffix(config, indexEntry, '/'));
 }
 
 static vector< vector< string > > getChunksOfLocalizedDescriptions(
@@ -222,71 +232,127 @@ static vector< vector< string > > getChunksOfLocalizedDescriptions(
 		return result;
 	}
 
-	auto translationVariable = config.getString("apt::acquire::translation");
-	auto locale = translationVariable == "environment" ?
-			setlocale(LC_MESSAGES, NULL) : translationVariable;
-	if (locale == "none")
-	{
-		return result;
-	}
-
-	vector< string > chunks;
+	vector< string > chunksBase;
 	if (!entry.component.empty())
 	{
-		chunks.push_back(entry.component);
+		chunksBase.push_back(entry.component);
 	}
-	chunks.push_back("i18n");
+	chunksBase.push_back("i18n");
 
-	result.push_back(chunks);
-	// cutting out an encoding
-	auto dotPosition = locale.rfind('.');
-	if (dotPosition != string::npos)
+	set< string > alreadyAddedTranslations;
+	auto addTranslation = [&chunksBase, &alreadyAddedTranslations, &result](const string& locale)
 	{
-		locale.erase(dotPosition);
-	}
-	result[0].push_back(string("Translation-") + locale);
+		if (alreadyAddedTranslations.insert(locale).second)
+		{
+			auto chunks = chunksBase;
+			chunks.push_back(string("Translation-") + locale);
+			result.push_back(chunks);
+		}
+	};
 
-	result.push_back(chunks);
-	// cutting out an country specificator
-	auto underlinePosition = locale.rfind('_');
-	if (underlinePosition != string::npos)
+	auto translationVariable = config.getString("cupt::languages::indexes");
+	auto translations = split(',', translationVariable);
+	FORIT(translationIt, translations)
 	{
-		locale.erase(underlinePosition);
+		auto locale = (*translationIt == "environment") ?
+				setlocale(LC_MESSAGES, NULL) : *translationIt;
+		if (locale == "none")
+		{
+			continue;
+		}
+
+		// cutting out an encoding
+		auto dotPosition = locale.rfind('.');
+		if (dotPosition != string::npos)
+		{
+			locale.erase(dotPosition);
+		}
+		addTranslation(locale);
+
+		// cutting out an country specificator
+		auto underlinePosition = locale.rfind('_');
+		if (underlinePosition != string::npos)
+		{
+			locale.erase(underlinePosition);
+		}
+		addTranslation(locale);
 	}
-	result[1].push_back(string("Translation-") + locale);
 
 	return result;
 }
 
-vector< string > getPathsOfLocalizedDescriptions(const Config& config, const IndexEntry& entry)
+static string extractLocalizationLanguage(const string& lastChunk)
 {
-	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
-	auto basePath = getPathOfIndexEntry(config, entry);
-
-	vector< string > result;
-	FORIT(chunkArrayIt, chunkArrays)
+	string result = lastChunk;
+	auto dashPosition = result.find('-');
+	if (dashPosition != string::npos)
 	{
-		result.push_back(basePath + "_" + join("_", *chunkArrayIt));
+		result.erase(0, dashPosition + 1);
 	}
-
 	return result;
 }
 
-vector< Cache::LocalizationDownloadRecord > getDownloadInfoOfLocalizedDescriptions(
+vector< pair< string, string > > getPathsOfLocalizedDescriptions(
 		const Config& config, const IndexEntry& entry)
 {
 	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
 	auto basePath = getPathOfIndexEntry(config, entry);
-	auto baseUri = getUriOfIndexEntry(entry);
 
-	vector< Cache::LocalizationDownloadRecord > result;
+	vector< pair< string, string > > result;
+	for (const auto& chunkArray: chunkArrays)
+	{
+		auto path = basePath + "_" + join("_", chunkArray);
+		result.push_back({ extractLocalizationLanguage(chunkArray.back()), std::move(path) });
+	}
+
+	return result;
+}
+
+vector< FileDownloadRecord > getDownloadInfoOfLocalizationIndex(const Config& config,
+		const IndexEntry& entry)
+{
+	return getDownloadInfoFromRelease(config, entry, entry.component + "/i18n/Index");
+}
+
+vector< LocalizationDownloadRecord2 > getDownloadInfoOfLocalizedDescriptions2(
+		const Config& config, const IndexEntry& entry)
+{
+	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
+	auto basePath = getPathOfIndexEntry(config, entry);
+
+	vector< LocalizationDownloadRecord2 > result;
 
 	FORIT(chunkArrayIt, chunkArrays)
 	{
-		Cache::LocalizationDownloadRecord record;
+		LocalizationDownloadRecord2 record;
 		record.localPath = basePath + "_" + join("_", *chunkArrayIt);
-		// yes, somewhy translations are always bzip2'ed
-		record.uri = baseUri + "/" + join("/", *chunkArrayIt) + ".bz2";
+		record.filePart = *(chunkArrayIt->rbegin()); // i.e. 'Translation-xyz' part
+		result.push_back(std::move(record));
+	}
+
+	return result;
+}
+
+vector< LocalizationDownloadRecord3 > getDownloadInfoOfLocalizedDescriptions3(
+		const Config& config, const IndexEntry& entry)
+{
+	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
+	auto basePath = getPathOfIndexEntry(config, entry);
+
+	vector< LocalizationDownloadRecord3 > result;
+
+	for (const auto& chunkArray: chunkArrays)
+	{
+		LocalizationDownloadRecord3 record;
+		record.fileDownloadRecords = getDownloadInfoFromRelease(config, entry,
+				entry.component + "/i18n/" + chunkArray.back());
+		if (record.fileDownloadRecords.empty())
+		{
+			continue;
+		}
+		record.localPath = basePath + "_" + join("_", chunkArray);
+		record.language = extractLocalizationLanguage(chunkArray.back());
+
 		result.push_back(std::move(record));
 	}
 
@@ -298,31 +364,31 @@ string getPathOfExtendedStates(const Config& config)
 	return config.getPath("dir::state::extendedstates");
 }
 
-bool verifySignature(const Config& config, const string& path)
+bool verifySignature(const Config& config, const string& path, const string& alias)
 {
 	auto debugging = config.getBool("debug::gpgv");
 	if (debugging)
 	{
-		debug("verifying file '%s'", path.c_str());
+		debug2("verifying file '%s'", path);
 	}
 
 	auto keyringPath = config.getString("gpgv::trustedkeyring");
 	if (debugging)
 	{
-		debug("keyring file is '%s'", keyringPath.c_str());
+		debug2("keyring file is '%s'", keyringPath);
 	}
 
 	auto signaturePath = path + ".gpg";
 	if (debugging)
 	{
-		debug("signature file is '%s'", signaturePath.c_str());
+		debug2("signature file is '%s'", signaturePath);
 	}
 
 	if (!fs::fileExists(signaturePath))
 	{
 		if (debugging)
 		{
-			debug("signature file '%s' doesn't exist", signaturePath.c_str());
+			debug2("signature file '%s' doesn't exist", signaturePath);
 		}
 		return 0;
 	}
@@ -335,8 +401,7 @@ bool verifySignature(const Config& config, const string& path)
 		{
 			if (debugging)
 			{
-				debug("unable to read signature file '%s': %s",
-						signaturePath.c_str(), openError.c_str());
+				debug2("unable to read signature file '%s': %s", signaturePath, openError);
 			}
 			return false;
 		}
@@ -348,8 +413,7 @@ bool verifySignature(const Config& config, const string& path)
 		{
 			if (debugging)
 			{
-				debug("unable to read keyring file '%s': %s",
-						keyringPath.c_str(), openError.c_str());
+				debug2("unable to read keyring file '%s': %s", keyringPath, openError);
 			}
 			return false;
 		}
@@ -364,7 +428,7 @@ bool verifySignature(const Config& config, const string& path)
 		File gpgPipe(gpgCommand, "pr", openError);
 		if (!openError.empty())
 		{
-			fatal("unable to open gpg pipe: %s", openError.c_str());
+			fatal2(__("unable to open the pipe '%s': %s"), gpgCommand, openError);
 		}
 
 		smatch m;
@@ -378,7 +442,7 @@ bool verifySignature(const Config& config, const string& path)
 				gpgPipe.getLine(result);
 				if (debugging && !gpgPipe.eof())
 				{
-					debug("fetched '%s' from gpg pipe", result.c_str());
+					debug2("fetched '%s' from gpg pipe", result);
 				}
 			} while (!gpgPipe.eof() && (
 						regex_search(result, m, sigIdRegex, regex_constants::match_continuous) ||
@@ -399,14 +463,14 @@ bool verifySignature(const Config& config, const string& path)
 		if (status.empty())
 		{
 			// no info from gpg at all
-			fatal("gpg: '%s': no info received", path.c_str());
+			fatal2(__("gpg: '%s': no information"), alias);
 		}
 
 		// first line ought to be validness indicator
 		static const sregex messageRegex = sregex::compile("(\\w+) (.*)");
 		if (!regex_match(status, m, messageRegex))
 		{
-			fatal("gpg: '%s': invalid status string '%s'", path.c_str(), status.c_str());
+			fatal2(__("gpg: '%s': invalid status string '%s'"), alias, status);
 		}
 
 		string messageType = m[1];
@@ -415,14 +479,9 @@ bool verifySignature(const Config& config, const string& path)
 		if (messageType == "GOODSIG")
 		{
 			string furtherInfo = gpgGetLine();
-			if (furtherInfo.empty())
-			{
-				fatal("gpg: '%s': error: unfinished status", path.c_str());
-			}
-
 			if (!regex_match(furtherInfo, m, messageRegex))
 			{
-				fatal("gpg: '%s': invalid further info string '%s'", path.c_str(), furtherInfo.c_str());
+				fatal2(__("gpg: '%s': invalid detailed information string '%s'"), alias, furtherInfo);
 			}
 
 			string furtherInfoType = m[1];
@@ -434,25 +493,24 @@ bool verifySignature(const Config& config, const string& path)
 			}
 			else if (furtherInfoType == "EXPSIG")
 			{
-				warn("gpg: '%s': expired signature: %s", path.c_str(), furtherInfoMessage.c_str());
+				warn2(__("gpg: '%s': expired signature: %s"), alias, furtherInfoMessage);
 			}
 			else if (furtherInfoType == "EXPKEYSIG")
 			{
-				warn("gpg: '%s': expired key: %s", path.c_str(), furtherInfoMessage.c_str());
+				warn2(__("gpg: '%s': expired key: %s"), alias, furtherInfoMessage);
 			}
 			else if (furtherInfoType == "REVKEYSIG")
 			{
-				warn("gpg: '%s': revoked key: %s", path.c_str(), furtherInfoMessage.c_str());
+				warn2(__("gpg: '%s': revoked key: %s"), alias, furtherInfoMessage);
 			}
 			else
 			{
-				warn("gpg: '%s': unknown error: %s %s",
-						path.c_str(), furtherInfoType.c_str(), furtherInfoMessage.c_str());
+				warn2(__("gpg: '%s': unknown error: %s %s"), alias, furtherInfoType, furtherInfoMessage);
 			}
 		}
 		else if (messageType == "BADSIG")
 		{
-			warn("gpg: '%s': bad signature: %s", path.c_str(), message.c_str());
+			warn2(__("gpg: '%s': bad signature: %s"), alias, message);
 		}
 		else if (messageType == "ERRSIG")
 		{
@@ -465,7 +523,7 @@ bool verifySignature(const Config& config, const string& path)
 			{
 				if (!regex_match(detail, m, messageRegex))
 				{
-					fatal("gpg: '%s': invalid detailed info string '%s'", path.c_str(), detail.c_str());
+					fatal2(__("gpg: '%s': invalid detailed information string '%s'"), alias, detail);
 				}
 				string detailType = m[1];
 				string detailMessage = m[2];
@@ -477,59 +535,59 @@ bool verifySignature(const Config& config, const string& path)
 					//
 					// NO_PUBKEY D4F5CE00FA0E9B9D
 					//
-					warn("gpg: '%s': public key '%s' not found", path.c_str(), detailMessage.c_str());
+					warn2(__("gpg: '%s': public key '%s' is not found"), alias, detailMessage);
 				}
 			}
 
 			if (!publicKeyWasNotFound)
 			{
-				warn("gpg: '%s': could not verify signature: %s", path.c_str(), message.c_str());
+				warn2(__("gpg: '%s': could not verify a signature: %s"), alias, message);
 			}
 		}
 		else if (messageType == "NODATA")
 		{
 			// no signature
-			warn("gpg: '%s': empty signature", path.c_str());
+			warn2(__("gpg: '%s': empty signature"), alias);
 		}
 		else if (messageType == "KEYEXPIRED")
 		{
-			warn("gpg: '%s': expired key: %s", path.c_str(), message.c_str());
+			warn2(__("gpg: '%s': expired key: %s"), alias, message);
 		}
 		else
 		{
-			warn("gpg: '%s': unknown message received: %s %s",
-					path.c_str(), messageType.c_str(), message.c_str());
+			warn2(__("gpg: '%s': unknown message: %s %s"), alias, messageType, message);
 		}
 	}
 	catch (Exception&)
 	{
-		warn("error while verifying signature for file '%s'", path.c_str());
+		warn2(__("unable to verify a signature for the '%s'"), alias);
 	}
 
 	if (debugging)
 	{
-		debug("the verify result is %u", (unsigned int)verifyResult);
+		debug2("the verify result is %u", (unsigned int)verifyResult);
 	}
 	return verifyResult;
 }
 
-shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config, const string& path)
+shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config,
+		const string& path, const string& alias)
 {
 	shared_ptr< cache::ReleaseInfo > result(new cache::ReleaseInfo);
 	result->notAutomatic = false; // default
+	result->butAutomaticUpgrades = false; // default
 
-	string openError;
-	File file(path, "r", openError);
-	if (!openError.empty())
-	{
-		fatal("unable to open release file '%s': EEE", path.c_str());
-	}
-
-	size_t lineNumber = 1;
 	static sregex fieldRegex = sregex::compile("^((?:\\w|-)+?): (.*)"); // $ implied in regex
 	smatch matches;
 	try
 	{
+		string openError;
+		File file(path, "r", openError);
+		if (!openError.empty())
+		{
+			fatal2(__("unable to open the file '%s': %s"), path, openError);
+		}
+
 		string line;
 		while (! file.getLine(line).eof())
 		{
@@ -568,34 +626,35 @@ shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config, const stri
 			{
 				result->notAutomatic = true;
 			}
+			else if (fieldName == "ButAutomaticUpgrades")
+			{
+				result->butAutomaticUpgrades = true;
+			}
 			else if (fieldName == "Architectures")
 			{
 				result->architectures = split(' ', fieldValue);
 			}
+			else if (fieldName == "Version")
+			{
+				result->version = fieldValue;
+			}
 			else if (fieldName == "Description")
 			{
 				result->description = fieldValue;
-				smatch descriptionMatch;
-				if (regex_search(fieldValue, descriptionMatch, sregex::compile("[0-9][0-9a-z._-]*")))
+				if (result->version.empty())
 				{
-					result->version = descriptionMatch[0];
+					smatch descriptionMatch;
+					if (regex_search(fieldValue, descriptionMatch, sregex::compile("[0-9][0-9a-z._-]*")))
+					{
+						result->version = descriptionMatch[0];
+					}
 				}
 			}
 		}
-		++lineNumber;
 	}
 	catch (Exception&)
 	{
-		fatal("error parsing release file '%s', line %u", path.c_str(), lineNumber);
-	}
-
-	if (result->vendor.empty())
-	{
-		warn("no vendor specified in release file '%s'", path.c_str());
-	}
-	if (result->archive.empty())
-	{
-		warn("no archive specified in release file '%s'", path.c_str());
+		fatal2(__("unable to parse the release '%s'"), alias);
 	}
 
 	{ // checking Valid-Until
@@ -617,14 +676,14 @@ shared_ptr< cache::ReleaseInfo > getReleaseInfo(const Config& config, const stri
 				if (mktime(&currentTm) > mktime(&validUntilTm))
 				{
 					bool warnOnly = config.getBool("cupt::cache::release-file-expiration::ignore");
-					(warnOnly ? warn : fatal)("release file '%s' has expired (expiry time '%s')",
-							path.c_str(), result->validUntilDate.c_str());
+					(warnOnly ? warn2< string, string > : fatal2< string, string >)
+							(__("the release '%s' has expired (expiry time '%s')"), alias, result->validUntilDate);
 				}
 			}
 			else
 			{
-				warn("unable to parse expiry time '%s' in release file '%s'",
-						result->validUntilDate.c_str(), path.c_str());
+				warn2(__("unable to parse the expiry time '%s' in the release '%s'"),
+						result->validUntilDate, alias);
 			}
 		}
 	}

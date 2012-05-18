@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -26,7 +26,7 @@
 namespace cupt {
 namespace cache {
 
-shared_ptr< BinaryVersion > BinaryVersion::parseFromFile(const Version::InitializationParameters& initParams)
+BinaryVersion* BinaryVersion::parseFromFile(const Version::InitializationParameters& initParams)
 {
 	auto v = new BinaryVersion;
 
@@ -146,21 +146,21 @@ shared_ptr< BinaryVersion > BinaryVersion::parseFromFile(const Version::Initiali
 
 	if (v->versionString.empty())
 	{
-		fatal("version string isn't defined");
+		fatal2(__("version string isn't defined"));
 	}
 	if (v->architecture.empty())
 	{
-		warn("package %s, version %s: architecture isn't defined, setting it to 'all'",
-				v->packageName.c_str(), v->versionString.c_str());
+		warn2(__("binary package %s, version %s: architecture isn't defined, setting it to 'all'"),
+				v->packageName, v->versionString);
 		v->architecture = "all";
 	}
 	v->sources.push_back(source);
 	if (!v->isInstalled() && v->file.hashSums.empty())
 	{
-		fatal("no hash sums specified");
+		fatal2(__("no hash sums specified"));
 	}
 
-	return shared_ptr< BinaryVersion >(v);
+	return v;
 }
 
 bool BinaryVersion::isInstalled() const
@@ -168,19 +168,19 @@ bool BinaryVersion::isInstalled() const
 	return sources.empty() ? false : sources[0].release->baseUri.empty();
 }
 
-bool BinaryVersion::areHashesEqual(const shared_ptr< const Version >& other) const
+bool BinaryVersion::areHashesEqual(const Version* other) const
 {
-	shared_ptr< const BinaryVersion > o = dynamic_pointer_cast< const BinaryVersion >(other);
+	auto o = dynamic_cast< const BinaryVersion* >(other);
 	if (!o)
 	{
-		fatal("internal error: areHashesEqual: non-binary version parameter");
+		fatal2i("areHashesEqual: non-binary version parameter");
 	}
 	return file.hashSums.match(o->file.hashSums);
 }
 
 const string BinaryVersion::RelationTypes::strings[] = {
-	__("Pre-Depends"), __("Depends"), __("Recommends"), __("Suggests"),
-	__("Enhances"), __("Conflicts"), __("Breaks"), __("Replaces")
+	N__("Pre-Depends"), N__("Depends"), N__("Recommends"), N__("Suggests"),
+	N__("Enhances"), N__("Conflicts"), N__("Breaks"), N__("Replaces")
 };
 const char* BinaryVersion::RelationTypes::rawStrings[] = {
 	"pre-depends", "depends", "recommends", "suggests",

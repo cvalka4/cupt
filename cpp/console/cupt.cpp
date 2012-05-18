@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2011 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -29,6 +29,7 @@ void showHelp(const char*);
 
 int main(int argc, char* argv[])
 {
+	setlocale(LC_ALL, "");
 	cupt::messageFd = STDERR_FILENO;
 
 	if (argc > 1)
@@ -37,7 +38,7 @@ int main(int argc, char* argv[])
 		{
 			if (argc > 2)
 			{
-				warn("the command '%s' doesn't accept arguments", argv[1]);
+				warn2(__("the command '%s' doesn't accept arguments"), argv[1]);
 			}
 			showOwnVersion();
 			return 0;
@@ -46,7 +47,7 @@ int main(int argc, char* argv[])
 		{
 			if (argc > 2)
 			{
-				warn("the command '%s' doesn't accept arguments", argv[1]);
+				warn2(__("the command '%s' doesn't accept arguments"), argv[1]);
 			}
 			showHelp(argv[0]);
 			return 0;
@@ -65,10 +66,9 @@ int main(int argc, char* argv[])
 
 int mainEx(int argc, char* argv[], Context& context, string& command)
 {
-	setlocale(LC_ALL, "");
 	try
 	{
-		command = parseCommonOptions(argc, argv, /* in */ context.getConfig(),
+		command = parseCommonOptions(argc, argv, /* in */ *context.getConfig(),
 				/* out */ context.unparsed);
 		context.argc = argc;
 		context.argv = argv;
@@ -79,7 +79,7 @@ int mainEx(int argc, char* argv[], Context& context, string& command)
 		}
 		catch (Exception&)
 		{
-			fatal("error performing command '%s'", command.c_str());
+			fatal2(__("error performing the command '%s'"), command);
 		}
 	}
 	catch (Exception&)
@@ -104,41 +104,42 @@ void showHelp(const char* argv0)
 	using std::map;
 	map< string, string > actionDescriptions = {
 		{ "help", __("prints a short help") },
-		{ "version", __("prints versions of this program and underlying library") },
+		{ "version", __("prints versions of this program and the underlying library") },
 		{ "config-dump", __("prints values of configuration variables") },
-		{ "show", __("prints info about binary package(s)") },
-		{ "showsrc", __("prints info about source packages(s)") },
+		{ "show", __("prints the info about binary package(s)") },
+		{ "showsrc", __("prints the info about source packages(s)") },
 		{ "search", __("searches for packages using regular expression(s)") },
 		{ "depends", __("prints dependencies of binary package(s)") },
 		{ "rdepends", __("print reverse-dependencies of binary package(s)") },
-		{ "why", __("finds a dependency path between system/package(s) and a package") },
-		{ "policy", __("prints pin info for the binary package(s)") },
-		{ "policysrc", __("prints pin info for the source package(s)") },
+		{ "why", __("finds a dependency path between a package set and a package") },
+		{ "policy", __("prints the pin info for the binary package(s)") },
+		{ "policysrc", __("prints the pin info for the source package(s)") },
 		{ "pkgnames", __("prints available package names") },
-		{ "changelog", __("views Debian changelog(s) of binary package(s)") },
-		{ "copyright", __("views Debian copyright info of binary package(s)") },
-		{ "screenshots", __("views Debian screenshot web pages for the binary package(s)") },
+		{ "changelog", __("views the Debian changelog(s) of binary package(s)") },
+		{ "copyright", __("views the Debian copyright(s) info of binary package(s)") },
+		{ "screenshots", __("views Debian screenshot web pages for binary package(s)") },
 		{ "update", __("updates repository metadata") },
 		{ "install", __("installs/upgrades/downgrades binary package(s)") },
 		{ "reinstall", __("reinstalls binary packages(s)") },
 		{ "remove", __("removes binary package(s)") },
 		{ "purge", __("removes binary package(s) along with their configuration files") },
+		{ "iii", __("\"install if installed\": upgrades/downgrades binary packages(s)") },
 		{ "satisfy", __("performs actions to make relation expressions satisfied") },
 		{ "safe-upgrade", __("upgrades the system without removing non-automatically installed packages") },
-		{ "full-upgrade", __("upgrades the system with possible removal of some packages") },
+		{ "full-upgrade", __("upgrades the system") },
 		{ "dist-upgrade", __("does a two-stage full upgrade") },
 		{ "build-dep", __("satisfies build dependencies for source package(s)") },
 		{ "source", __("fetches and unpacks source package(s)") },
 		{ "clean", __("cleans the whole binary package cache") },
-		{ "autoclean", __("cleans unavailable from repositories archives from binary package cache") },
+		{ "autoclean", __("cleans packages from the binary package cache if not available from repositories") },
 		{ "markauto", __("marks binary package(s) as automatically installed") },
 		{ "unmarkauto", __("marks binary package(s) as manually installed") },
-		{ "showauto", __("shows list of manually or automatically installed packages") },
+		{ "showauto", __("shows the list of manually or automatically installed packages") },
 		{ "shell", __("starts an interactive package manager shell") },
 		{ "snapshot", __("works with system snapshots") },
 	};
 
-	cout << sf(__("Usage: %s <action> [<parameters>]"), argv0) << endl;
+	cout << format2(__("Usage: %s <action> [<parameters>]"), argv0) << endl;
 	cout << endl;
 	cout << __("Actions:") << endl;
 	FORIT(it, actionDescriptions)
