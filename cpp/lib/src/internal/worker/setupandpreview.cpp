@@ -138,7 +138,9 @@ void SetupAndPreviewWorker::__generate_action_preview(const string& packageName,
 	if (action != Action::Count)
 	{
 		__actions_preview->groups[action][packageName] = suggestedPackage;
+	}
 
+	{ // does auto status need changing?
 		bool targetAutoStatus;
 		if (action == Action::Remove ||
 			(action == Action::Purge && installedInfo &&

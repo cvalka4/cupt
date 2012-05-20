@@ -1025,6 +1025,7 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 
 			showUnsatisfiedSoftDependencies(offer, showDetails, &summaryStream);
 		};
+		actionCount += actionsPreview->autoFlagChanges.size();
 
 		// nothing to do maybe?
 		if (actionCount == 0)
