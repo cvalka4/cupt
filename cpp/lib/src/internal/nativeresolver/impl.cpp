@@ -709,6 +709,17 @@ void NativeResolverImpl::__prepare_reject_requests(vector< unique_ptr< Action > 
 		{
 			actionPtr->elementsToReject = elementPtrs; // all
 		}
+		else
+		{
+			const auto& uselessToRejectElements = SolutionStorage::getConflictingElements(actionPtr->newElementPtr);
+			auto deleteIt = std::remove_if(actionPtr->elementsToReject.begin(), actionPtr->elementsToReject.end(),
+					[&uselessToRejectElements](const dg::Element* elementPtr)
+					{
+						return std::find(uselessToRejectElements.begin(), uselessToRejectElements.end(), elementPtr) !=
+								uselessToRejectElements.end();
+					});
+			actionPtr->elementsToReject.erase(deleteIt, actionPtr->elementsToReject.end());
+		}
 	}
 }
 
@@ -732,6 +743,10 @@ Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 		{
 			const string& packageName = vertex->getPackageName();
 			if (packageName == __dummy_package_name)
+			{
+				continue;
+			}
+			if (!vertex->version && !__initial_packages.count(packageName))
 			{
 				continue;
 			}
