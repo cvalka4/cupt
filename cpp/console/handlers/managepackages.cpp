@@ -44,7 +44,8 @@ typedef Worker::Action WA;
 const WA::Type fakeNotPolicyVersionAction = WA::Type(999);
 const WA::Type fakeAutoRemove = WA::Type(1000);
 const WA::Type fakeAutoPurge = WA::Type(1001);
-
+const WA::Type fakeBecomeAutomaticallyInstalled = WA::Type(1002);
+const WA::Type fakeBecomeManuallyInstalled = WA::Type(1003);
 
 static void preProcessMode(ManagePackages::Mode& mode, Config& config, Resolver& resolver)
 {
@@ -781,7 +782,9 @@ static string colorizeActionName(const Colorizer& colorizer, const string& actio
 {
 	if (actionType != WA::Install && actionType != WA::Upgrade &&
 			actionType != WA::Configure && actionType != WA::ProcessTriggers &&
-			actionType != fakeAutoRemove && actionType != fakeAutoPurge)
+			actionType != fakeAutoRemove && actionType != fakeAutoPurge &&
+			actionType != fakeBecomeAutomaticallyInstalled &&
+			actionType != fakeBecomeManuallyInstalled)
 	{
 		return colorizer.makeBold(actionName);
 	}
@@ -913,6 +916,42 @@ Resolver::SuggestedPackages filterNoLongerNeeded(const Resolver::SuggestedPackag
 	return result;
 }
 
+Resolver::SuggestedPackages filterPureAutoStatusChanges(const Cache& cache,
+		const Worker::ActionsPreview& actionsPreview, bool targetAutoStatus)
+{
+	static const shared_ptr< Resolver::UserReason > userReason;
+	Resolver::SuggestedPackages result;
+
+	for (const auto& autoStatusChange: actionsPreview.autoFlagChanges)
+	{
+		if (autoStatusChange.second == targetAutoStatus)
+		{
+			const string& packageName = autoStatusChange.first;
+			for (size_t ai = 0; ai < WA::Count; ++ai)
+			{
+				if (targetAutoStatus && ai != WA::Install) continue;
+				if (!targetAutoStatus && (ai != WA::Remove && ai != WA::Purge)) continue;
+
+				if (actionsPreview.groups[ai].count(packageName))
+				{
+					goto next_package; // natural, non-pure change
+				}
+			}
+
+			{
+				Resolver::SuggestedPackage& entry = result[packageName];
+				entry.version = cache.getBinaryPackage(packageName)->getInstalledVersion();
+				entry.automaticallyInstalledFlag = !targetAutoStatus;
+				entry.reasons.push_back(userReason);
+			}
+
+			next_package: ;
+		}
+	}
+
+	return result;
+}
+
 Resolver::SuggestedPackages getSuggestedPackagesByAction(const shared_ptr< const Cache >& cache,
 		const Resolver::Offer& offer,
 		const shared_ptr< const Worker::ActionsPreview >& actionsPreview, WA::Type actionType)
@@ -926,6 +965,10 @@ Resolver::SuggestedPackages getSuggestedPackagesByAction(const shared_ptr< const
 			return filterNoLongerNeeded(actionsPreview->groups[WA::Remove], false);
 		case fakeAutoPurge:
 			return filterNoLongerNeeded(actionsPreview->groups[WA::Purge], false);
+		case fakeBecomeAutomaticallyInstalled:
+			return filterPureAutoStatusChanges(*cache, *actionsPreview, true);
+		case fakeBecomeManuallyInstalled:
+			return filterPureAutoStatusChanges(*cache, *actionsPreview, false);
 		#pragma GCC diagnostic pop
 		case WA::Remove:
 			return filterNoLongerNeeded(actionsPreview->groups[WA::Remove], true);
@@ -978,10 +1021,14 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 				{ fakeNotPolicyVersionAction, __("will have a not preferred version") },
 				{ fakeAutoRemove, __("are no longer needed and thus will be auto-removed") },
 				{ fakeAutoPurge, __("are no longer needed and thus will be auto-purged") },
+				{ fakeBecomeAutomaticallyInstalled, __("will be marked as automatically installed") },
+				{ fakeBecomeManuallyInstalled, __("will be marked as manually installed") },
 			};
 			cout << endl;
 
-			vector< WA::Type > actionTypesInOrder = { WA::Install, WA::Upgrade, WA::Remove,
+			vector< WA::Type > actionTypesInOrder = {
+					fakeBecomeAutomaticallyInstalled, fakeBecomeManuallyInstalled,
+					WA::Install, WA::Upgrade, WA::Remove,
 					WA::Purge, WA::Downgrade, WA::Configure, WA::ProcessTriggers, WA::Deconfigure };
 			if (showNotPreferred)
 			{
@@ -1025,7 +1072,6 @@ Resolver::CallbackType generateManagementPrompt(const shared_ptr< const Config >
 
 			showUnsatisfiedSoftDependencies(offer, showDetails, &summaryStream);
 		};
-		actionCount += actionsPreview->autoFlagChanges.size();
 
 		// nothing to do maybe?
 		if (actionCount == 0)
