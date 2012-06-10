@@ -136,6 +136,8 @@ bool CUPT_API checkVersionString(const string& versionString, bool throwOnError 
  */
 int CUPT_API compareVersionStrings(const string& left, const string& right);
 
+CUPT_API extern char versionStringIdSuffixDelimiter;
+
 } // namespace
 
 #include <cupt/format2.hpp>

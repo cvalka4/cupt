@@ -30,9 +30,18 @@ void __divide_versions_parts(const string& versionString, StringAnchorPair& epoc
 		StringAnchorPair& upstream, StringAnchorPair& revision)
 {
 	epoch.first = versionString.begin();
-	revision.second = versionString.end();
 
-	size_t position = versionString.find(':');
+	auto position = versionStrings.rfind(versionStringIdSuffixDelimiter);
+	if (position != string::npos)
+	{
+		revision.second = versionStrings.begin() + position;
+	}
+	else
+	{
+		revision.second = versionString.end();
+	}
+
+	position = versionString.find(':');
 	if (position != string::npos)
 	{
 		// we found an epoch
