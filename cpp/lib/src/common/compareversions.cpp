@@ -31,10 +31,10 @@ void __divide_versions_parts(const string& versionString, StringAnchorPair& epoc
 {
 	epoch.first = versionString.begin();
 
-	auto position = versionStrings.rfind(versionStringIdSuffixDelimiter);
+	auto position = versionString.rfind(versionStringIdSuffixDelimiter);
 	if (position != string::npos)
 	{
-		revision.second = versionStrings.begin() + position;
+		revision.second = versionString.begin() + position;
 	}
 	else
 	{

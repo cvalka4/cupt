@@ -29,7 +29,6 @@ namespace cache {
 /// Package for binary versions
 class CUPT_API BinaryPackage: public Package
 {
-	const bool __allow_reinstall;
  protected:
 	/// @cond
 	CUPT_LOCAL virtual unique_ptr< Version > _parse_version(const Version::InitializationParameters& initParams) const;
@@ -42,7 +41,7 @@ class CUPT_API BinaryPackage: public Package
 	 * @param allowReinstall allow reinstalling installed version of this package,
 	 * i.e. mangle the version string of installed version
 	 */
-	BinaryPackage(const string* binaryArchitecture, bool allowReinstall);
+	BinaryPackage(const string* binaryArchitecture);
 	/// gets list of versions
 	vector< const BinaryVersion* > getVersions() const;
 	/// gets installed version

@@ -58,19 +58,10 @@ void CacheImpl::processProvides(const string* packageNamePtr,
 			providesStringStart, providesStringEnd, callback);
 }
 
-Package* CacheImpl::newBinaryPackage(const string& packageName) const
+Package* CacheImpl::newBinaryPackage(const string& /* packageName */) const
 {
-	bool needsReinstall = false;
-	FORIT(regexPtrIt, packageNameRegexesToReinstall)
-	{
-		if (regex_search(packageName, *__smatch_ptr, **regexPtrIt))
-		{
-			needsReinstall = true;
-			break;
-		}
-	}
-
-	return new BinaryPackage(binaryArchitecture.get(), needsReinstall);
+	// TODO: remove packageNameRegexesToReinstall
+	return new BinaryPackage(binaryArchitecture.get());
 }
 
 Package* CacheImpl::newSourcePackage(const string& /* packageName */) const
