@@ -64,6 +64,12 @@ static inline bool __equal_original_versions(const string& left, const string& r
 			right, 0, right.rfind(versionStringIdSuffixDelimiter)) == 0;
 }
 
+static inline bool __is_installed(const Version* version)
+{
+	auto binaryVersion = dynamic_cast< const BinaryVersion* >(version);
+	return (binaryVersion && binaryVersion->isInstalled());
+}
+
 void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 {
 	if (!_is_architecture_appropriate(parsedVersion.get()))
@@ -74,13 +80,13 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 	// merging
 	try
 	{
-		auto binaryVersion = dynamic_cast< BinaryVersion* >(parsedVersion.get());
-		if (binaryVersion && binaryVersion->isInstalled())
+		if (__is_installed(parsedVersion.get()))
 		{
 			// no way to know is this version the same as in repositories,
 			// until for example #667665 is implemented
-			binaryVersion->versionString += versionStringIdSuffixDelimiter;
-			binaryVersion->versionString += "installed";
+			parsedVersion->versionString += versionStringIdSuffixDelimiter;
+			parsedVersion->versionString += "installed";
+			__parsed_versions.push_back(std::move(parsedVersion));
 		}
 		else
 		{
@@ -91,6 +97,10 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 			for (const auto& presentVersion: __parsed_versions)
 			{
 				if (!__equal_original_versions(presentVersion->versionString, parsedVersionString))
+				{
+					continue;
+				}
+				if (__is_installed(presentVersion.get()))
 				{
 					continue;
 				}
