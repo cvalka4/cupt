@@ -663,8 +663,42 @@ void CacheImpl::parsePreferences()
 	pinInfo.reset(new PinInfo(config, systemState));
 }
 
+ssize_t CacheImpl::computePin(const Version* version, const BinaryPackage* binaryPackage) const
+{
+	auto getInstalledVersionString = [&binaryPackage]() -> const string&
+	{
+		static const string emptyString;
+		if (binaryPackage)
+		{
+			auto installedVersion = binaryPackage->getInstalledVersion();
+			if (installedVersion)
+			{
+				return installedVersion->versionString;
+			}
+		}
+		return emptyString;
+	};
+
+	auto installedVersionString = getInstalledVersionString();
+	auto result = pinInfo->getPin(version, installedVersionString);
+
+	if (version->versionString == installedVersionString)
+	{
+		for (const auto& otherVersion: binaryPackage->getVersions())
+		{
+			if (otherVersion == version) continue;
+			if (equalOriginalVersionStrings(otherVersion->versionString, installedVersionString))
+			{
+				auto otherPin = getPin(otherVersion, [&binaryPackage]() { return binaryPackage; });
+				if (otherPin > result) result = otherPin;
+			}
+		}
+	}
+	return result;
+}
+
 ssize_t CacheImpl::getPin(const Version* version,
-		const std::function< string () >& getInstalledVersionString) const
+		const std::function< const BinaryPackage* () >& getBinaryPackage) const
 {
 	if (Cache::memoize)
 	{
@@ -675,7 +709,7 @@ ssize_t CacheImpl::getPin(const Version* version,
 		}
 	}
 
-	auto result = pinInfo->getPin(version, getInstalledVersionString());
+	auto result = computePin(version, getBinaryPackage());
 	if (Cache::memoize)
 	{
 		pinCache.insert({ version, result });

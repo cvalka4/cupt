@@ -23,6 +23,8 @@
 #include <cupt/cache/releaseinfo.hpp>
 #include <cupt/cache/binaryversion.hpp>
 
+#include <internal/common.hpp>
+
 namespace cupt {
 namespace cache {
 
@@ -58,12 +60,6 @@ vector< const Version* > Package::getVersions() const
 	return result;
 }
 
-static inline bool __equal_original_versions(const string& left, const string& right)
-{
-	return left.compare(0, left.rfind(versionStringIdSuffixDelimiter),
-			right, 0, right.rfind(versionStringIdSuffixDelimiter)) == 0;
-}
-
 static inline bool __is_installed(const Version* version)
 {
 	auto binaryVersion = dynamic_cast< const BinaryVersion* >(version);
@@ -96,7 +92,7 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 			bool merged = false;
 			for (const auto& presentVersion: __parsed_versions)
 			{
-				if (!__equal_original_versions(presentVersion->versionString, parsedVersionString))
+				if (!internal::equalOriginalVersionStrings(presentVersion->versionString, parsedVersionString))
 				{
 					continue;
 				}

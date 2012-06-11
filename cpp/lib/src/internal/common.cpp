@@ -183,6 +183,12 @@ void processSpacePipeSpaceDelimitedStrings(string::const_iterator begin, string:
 	__process_space_symbol_space_delimited_strings<string::const_iterator, '|'>(begin, end, callback);
 }
 
+bool equalOriginalVersionStrings(const string& left, const string& right)
+{
+	return left.compare(0, left.rfind(versionStringIdSuffixDelimiter),
+			right, 0, right.rfind(versionStringIdSuffixDelimiter)) == 0;
+}
+
 } // namespace
 } // namespace
 
