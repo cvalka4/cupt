@@ -65,7 +65,7 @@ void __divide_versions_parts(const string& versionString, StringAnchorPair& epoc
 	}
 	else
 	{
-		upstream.second = versionString.end();
+		upstream.second = revision.second;
 		revision.first = revision.second;
 	}
 }
