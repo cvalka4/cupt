@@ -528,7 +528,9 @@ class DependencyGraph::FillHelper
 					if (!existingVersion) continue;
 					if (equalOriginalVersionStrings(version->versionString, existingVersion->versionString))
 					{
-						if (version->relations == existingVersion->relations)
+						if (std::equal(version->relations,
+									version->relations + BinaryVersion::RelationTypes::Count,
+									existingVersion->relations))
 						{
 							return false; // no reasons to allow this version dependency-wise
 						}
