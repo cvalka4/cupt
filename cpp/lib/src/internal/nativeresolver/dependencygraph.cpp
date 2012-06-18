@@ -28,6 +28,7 @@ using std::list;
 
 #include <internal/nativeresolver/solution.hpp>
 #include <internal/nativeresolver/dependencygraph.hpp>
+#include <internal/common.hpp>
 
 namespace cupt {
 namespace internal {
@@ -517,6 +518,22 @@ class DependencyGraph::FillHelper
 			if (!version && !__can_package_be_removed(packageName))
 			{
 				return false;
+			}
+
+			if (version)
+			{
+				for (const BasicVertex* bv: __package_name_to_vertex_ptrs[packageName])
+				{
+					auto existingVersion = (static_cast< const VersionVertex* >(bv))->version;
+					if (!existingVersion) continue;
+					if (equalOriginalVersionStrings(version->versionString, existingVersion->versionString))
+					{
+						if (version->relations == existingVersion->relations)
+						{
+							return false; // no reasons to allow this version dependency-wise
+						}
+					}
+				}
 			}
 
 			return true;
