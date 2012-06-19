@@ -679,7 +679,7 @@ ssize_t CacheImpl::computePin(const Version* version, const BinaryPackage* binar
 		return emptyString;
 	};
 
-	auto installedVersionString = getInstalledVersionString();
+	const auto& installedVersionString = getInstalledVersionString();
 	auto result = pinInfo->getPin(version, installedVersionString);
 
 	if (version->versionString == installedVersionString)
