@@ -32,6 +32,7 @@ class Context
 	bool __used_source;
 	bool __used_binary;
 	bool __used_installed;
+	bool __valid;
  public:
 	Context();
 
@@ -40,6 +41,7 @@ class Context
 			bool useSource, bool useBinary, bool useInstalled,
 			const vector< string >& packageNameGlobsToReinstall = vector< string >());
 	void clearCache();
+	void invalidate();
 
 	vector< string > unparsed;
 	int argc; // argc, argv - for exec() in distUpgrade()
@@ -54,6 +56,7 @@ bpo::variables_map parseOptions(const Context& context, bpo::options_description
 		[](const string&) -> pair< string, string > { return make_pair(string(), string()); } );
 
 void checkNoExtraArguments(const vector< string >& arguments);
+vector< string > convertLineToShellArguments(const string& line);
 
 shared_ptr< Progress > getDownloadProgress(const Config&);
 

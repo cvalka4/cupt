@@ -42,7 +42,7 @@ However, you are invited to test it and increase the number of users.
 
 - Some features which are present in other high-level package managers are missing.
 
-Among them: GUI and TUI interfaces, cdrom:// URI download method, repositories
+Among them: multiarch, GUI and TUI interfaces, cdrom:// URI download method, repositories
 without a Release file, integration with //cron(8)//. And there are probably
 many more.
 
@@ -1073,6 +1073,9 @@ The effect above is the same as if you specified
 ``` cupt install gnash libgnome-keyring0-
 
 in the command line from the start.
+
+
+Starting from Cupt 2.6 you can specify multiple expressions on the same line.
 
 === colors ===
 

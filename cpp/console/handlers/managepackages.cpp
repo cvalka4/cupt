@@ -1219,12 +1219,11 @@ void queryAndProcessAdditionalPackageExpressions(const Config& config, const Cac
 	string answer;
 	do
 	{
-		cout << __("Enter a package expression (empty to finish): ");
+		cout << __("Enter package expression(s) (empty to finish): ");
 		std::getline(std::cin, answer);
 		if (!answer.empty())
 		{
-			processPackageExpressions(config, cache, mode, resolver, worker,
-					vector< string > { answer });
+			processPackageExpressions(config, cache, mode, resolver, worker, convertLineToShellArguments(answer));
 		}
 		else
 		{
@@ -1330,6 +1329,7 @@ int managePackages(Context& context, ManagePackages::Mode mode)
 
 		auto downloadProgress = getDownloadProgress(*config);
 		cout << __("Performing requested actions:") << endl;
+		context.invalidate();
 		try
 		{
 			worker->changeSystem(downloadProgress);
@@ -1398,6 +1398,7 @@ int updateReleaseAndIndexData(Context& context)
 	auto downloadProgress = getDownloadProgress(*config);
 	Worker worker(config, cache);
 
+	context.invalidate();
 	// may throw exception
 	worker.updateReleaseAndIndexData(downloadProgress);
 

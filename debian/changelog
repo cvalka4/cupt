@@ -8,6 +8,11 @@ cupt (2.6.0~) UNRELEASED; urgency=low
       - 'markauto', 'unmarkauto': are now first-class management commands.
       - Action preview prompt: now properly show reinstalled packages as
         reinstalled, not as upgraded.
+      - Action preview prompt: removed the 'one expression per line'
+        limitation while processing 'a' choice.
+    - 'shell':
+      - Don't rebuild the cache uselessly when a package management action
+        was suggested but not confirmed by user.
   * lib:
     - Removed deprecated functions 'fatal', 'warn', 'debug', 'simulate'.
     - [API break] '__': now returns 'const char*' instead of 'string'.
@@ -41,6 +46,20 @@ cupt (2.6.0~) UNRELEASED; urgency=low
       - Bumped the library API version.
 
  -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 08 Apr 2012 10:59:48 +0300
+
+cupt (2.5.7) unstable; urgency=low
+
+  * lib:
+    - cache:
+      - Parsing sources list: parse afterline comments properly. Thanks to
+        Alexey Ivanov for the report. (Closes: #678345)
+  * doc:
+    - tutorial:
+      - 'Disadvantages': said specificly that multiarch is not supported.
+  * po:
+    - Added German translation by Chris Leick. (Closes: #677758)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 28 Jun 2012 14:03:52 +0300
 
 cupt (2.5.6) unstable; urgency=low
 

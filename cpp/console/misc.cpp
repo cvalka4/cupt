@@ -23,6 +23,7 @@ using std::map;
 
 #include <common/regex.hpp>
 
+#include <cupt/file.hpp>
 #include <cupt/download/progresses/console.hpp>
 
 #include "common.hpp"
@@ -287,6 +288,30 @@ void checkNoExtraArguments(const vector< string >& arguments)
 	}
 }
 
+vector< string > convertLineToShellArguments(const string& line)
+{
+	vector< string > arguments;
+
+	// kind of hack to get arguments as it was real shell
+	// if you know easier way, let me know :)
+	string errorString;
+	// 'A' - to not let echo interpret $word as an option
+	string shellCommand = format2("(for word in %s; do echo A$word; done)", line);
+	File pipe(shellCommand, "pr", errorString);
+	if (!errorString.empty())
+	{
+		fatal2(__("unable to open an internal shell pipe: %s"), errorString);
+	}
+
+	string argument;
+	while (!pipe.getLine(argument).eof())
+	{
+		arguments.push_back(argument.substr(1));
+	}
+
+	return arguments;
+}
+
 void handleQuietOption(const Config& config)
 {
 	if (config.getBool("quiet"))
@@ -320,7 +345,8 @@ shared_ptr< Config > Context::getConfig()
 }
 
 Context::Context()
-	: __used_source(false), __used_binary(false), __used_installed(false)
+	: __used_source(false), __used_binary(false), __used_installed(false),
+	__valid(true)
 {}
 
 shared_ptr< const Cache > Context::getCache(
@@ -329,6 +355,7 @@ shared_ptr< const Cache > Context::getCache(
 {
 	bool needsRebuild =
 			!__cache ||
+			!__valid ||
 			!packageNameGlobsToReinstall.empty() ||
 			(useSource && !__used_source) ||
 			((useBinary != __used_binary || useInstalled != __used_installed) && (useBinary || useInstalled));
@@ -348,6 +375,7 @@ shared_ptr< const Cache > Context::getCache(
 	__used_source = useSource;
 	__used_binary = useBinary;
 	__used_installed = useInstalled;
+	__valid = true;
 
 	return __cache;
 }
@@ -356,4 +384,10 @@ void Context::clearCache()
 {
 	__cache.reset();
 }
+
+void Context::invalidate()
+{
+	__valid = false;
+}
+
 
