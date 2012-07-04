@@ -43,6 +43,7 @@ void processSpaceCommaSpaceDelimitedStrings(string::const_iterator begin, string
 void processSpacePipeSpaceDelimitedStrings(string::const_iterator begin, string::const_iterator end,
 		const std::function< void (string::const_iterator, string::const_iterator) >& callback);
 
+string getOriginalVersionString(const string&);
 bool equalOriginalVersionStrings(const string& left, const string& right);
 
 } // namespace

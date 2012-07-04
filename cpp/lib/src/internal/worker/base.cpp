@@ -60,7 +60,7 @@ string WorkerBase::_get_archives_directory() const
 
 string WorkerBase::_get_archive_basename(const BinaryVersion* version)
 {
-	return version->packageName + '_' + version->versionString + '_' +
+	return version->packageName + '_' + getOriginalVersionString(version->versionString) + '_' +
 			version->architecture + ".deb";
 }
 
