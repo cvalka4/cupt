@@ -25,10 +25,10 @@ using std::list;
 #include <cupt/cache/binarypackage.hpp>
 #include <cupt/cache/sourcepackage.hpp>
 #include <cupt/cache/sourceversion.hpp>
+#include <cupt/versionstring.hpp>
 
 #include <internal/nativeresolver/solution.hpp>
 #include <internal/nativeresolver/dependencygraph.hpp>
-#include <internal/common.hpp>
 
 namespace cupt {
 namespace internal {
@@ -526,7 +526,7 @@ class DependencyGraph::FillHelper
 				{
 					auto existingVersion = (static_cast< const VersionVertex* >(bv))->version;
 					if (!existingVersion) continue;
-					if (equalOriginalVersionStrings(version->versionString, existingVersion->versionString))
+					if (versionstring::sameOriginal(version->versionString, existingVersion->versionString))
 					{
 						if (std::equal(version->relations,
 									version->relations + BinaryVersion::RelationTypes::Count,

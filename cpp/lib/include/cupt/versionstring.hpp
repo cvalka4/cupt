@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2012 by Eugene V. Lyubimkin                             *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -15,38 +15,20 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#ifndef CUPT_INTERNAL_COMMON_SEEN
-#define CUPT_INTERNAL_COMMON_SEEN
+#ifndef CUPT_VERSIONSTRING_SEEN
+#define CUPT_VERSIONSTRING_SEEN
 
-#include <sys/wait.h>
-
-#include <cupt/common.hpp>
-
+// FIXME: document
 namespace cupt {
-namespace internal {
+namespace versionstring {
 
-void chomp(string& str);
+CUPT_API extern char idSuffixDelimiter;
 
-vector< string > split(char, const string&, bool allowEmpty = false);
+CUPT_API string getOriginal(const string& versionString);
+bool sameOriginal(const string& leftVersionString, const string& rightVersionString);
 
-string getWaitStatusDescription(int status);
-
-// we may use following instead of boost::lexical_cast<> because of speed
-uint32_t string2uint32(pair< string::const_iterator, string::const_iterator > input);
-
-bool architectureMatch(const string& architecture, const string& pattern);
-
-void processSpaceCommaSpaceDelimitedStrings(const char* begin, const char* end,
-		const std::function< void (const char*, const char*) >& callback);
-void processSpaceCommaSpaceDelimitedStrings(string::const_iterator begin, string::const_iterator end,
-		const std::function< void (string::const_iterator, string::const_iterator) >& callback);
-void processSpacePipeSpaceDelimitedStrings(string::const_iterator begin, string::const_iterator end,
-		const std::function< void (string::const_iterator, string::const_iterator) >& callback);
-
-} // namespace
-} // namespace
-
-#define N__(arg) arg
+}
+}
 
 #endif
 

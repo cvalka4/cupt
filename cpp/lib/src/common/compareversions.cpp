@@ -19,6 +19,7 @@
 #include <cstring>
 
 #include <cupt/common.hpp>
+#include <cupt/versionstring.hpp>
 
 #include <internal/common.hpp>
 
@@ -31,7 +32,7 @@ void __divide_versions_parts(const string& versionString, StringAnchorPair& epoc
 {
 	epoch.first = versionString.begin();
 
-	auto position = versionString.rfind(versionStringIdSuffixDelimiter);
+	auto position = versionString.rfind(versionstring::idSuffixDelimiter);
 	if (position != string::npos)
 	{
 		revision.second = versionString.begin() + position;

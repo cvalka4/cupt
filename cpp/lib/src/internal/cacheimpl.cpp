@@ -26,6 +26,7 @@
 #include <cupt/cache/releaseinfo.hpp>
 #include <cupt/system/state.hpp>
 #include <cupt/file.hpp>
+#include <cupt/versionstring.hpp>
 
 #include <internal/cacheimpl.hpp>
 #include <internal/filesystem.hpp>
@@ -698,7 +699,7 @@ ssize_t CacheImpl::computePin(const Version* version, const BinaryPackage* binar
 		for (const auto& otherVersion: binaryPackage->getVersions())
 		{
 			if (otherVersion == version) continue;
-			if (equalOriginalVersionStrings(otherVersion->versionString, installedVersionString))
+			if (versionstring::sameOriginal(otherVersion->versionString, installedVersionString))
 			{
 				auto otherPin = getPin(otherVersion, [&binaryPackage]() { return binaryPackage; });
 				if (otherPin > result) result = otherPin;

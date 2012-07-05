@@ -200,7 +200,5 @@ const char* __(const char* buf)
 	return dgettext("cupt", buf);
 }
 
-char versionStringIdSuffixDelimiter = '^';
-
 } // namespace
 

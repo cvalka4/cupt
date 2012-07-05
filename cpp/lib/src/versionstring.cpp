@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2012 by Eugene V. Lyubimkin                             *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -15,38 +15,24 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#ifndef CUPT_INTERNAL_COMMON_SEEN
-#define CUPT_INTERNAL_COMMON_SEEN
-
-#include <sys/wait.h>
-
-#include <cupt/common.hpp>
+#include <cupt/versionstring.hpp>
 
 namespace cupt {
-namespace internal {
+namespace versionstring {
 
-void chomp(string& str);
+char idSuffixDelimiter = '^';
 
-vector< string > split(char, const string&, bool allowEmpty = false);
+//TODO: VersionString class?
+string getOriginal(const string& s)
+{
+	return s.substr(0, s.rfind(idSuffixDelimiter));
+}
 
-string getWaitStatusDescription(int status);
+bool sameOriginal(const string& left, const string& right)
+{
+	return left.compare(0, left.rfind(idSuffixDelimiter),
+			right, 0, right.rfind(idSuffixDelimiter)) == 0;
+}
 
-// we may use following instead of boost::lexical_cast<> because of speed
-uint32_t string2uint32(pair< string::const_iterator, string::const_iterator > input);
-
-bool architectureMatch(const string& architecture, const string& pattern);
-
-void processSpaceCommaSpaceDelimitedStrings(const char* begin, const char* end,
-		const std::function< void (const char*, const char*) >& callback);
-void processSpaceCommaSpaceDelimitedStrings(string::const_iterator begin, string::const_iterator end,
-		const std::function< void (string::const_iterator, string::const_iterator) >& callback);
-void processSpacePipeSpaceDelimitedStrings(string::const_iterator begin, string::const_iterator end,
-		const std::function< void (string::const_iterator, string::const_iterator) >& callback);
-
-} // namespace
-} // namespace
-
-#define N__(arg) arg
-
-#endif
-
+}
+}

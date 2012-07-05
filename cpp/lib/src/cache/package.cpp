@@ -22,8 +22,7 @@
 #include <cupt/cache/package.hpp>
 #include <cupt/cache/releaseinfo.hpp>
 #include <cupt/cache/binaryversion.hpp>
-
-#include <internal/common.hpp>
+#include <cupt/versionstring.hpp>
 
 namespace cupt {
 namespace cache {
@@ -80,7 +79,7 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 		{
 			// no way to know is this version the same as in repositories,
 			// until for example #667665 is implemented
-			parsedVersion->versionString += versionStringIdSuffixDelimiter;
+			parsedVersion->versionString += versionstring::idSuffixDelimiter;
 			parsedVersion->versionString += "installed";
 			__parsed_versions.push_back(std::move(parsedVersion));
 		}
@@ -92,7 +91,7 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 			bool merged = false;
 			for (const auto& presentVersion: __parsed_versions)
 			{
-				if (!internal::equalOriginalVersionStrings(presentVersion->versionString, parsedVersionString))
+				if (!versionstring::sameOriginal(presentVersion->versionString, parsedVersionString))
 				{
 					continue;
 				}
@@ -119,7 +118,7 @@ void Package::__merge_version(unique_ptr< Version >&& parsedVersion)
 				if (clashed)
 				{
 					static size_t idCounter = 0;
-					parsedVersion->versionString += versionStringIdSuffixDelimiter;
+					parsedVersion->versionString += versionstring::idSuffixDelimiter;
 					parsedVersion->versionString += format2("dhs%zu", idCounter++);
 				}
 				__parsed_versions.push_back(std::move(parsedVersion));
