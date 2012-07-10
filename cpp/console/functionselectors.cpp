@@ -21,6 +21,7 @@
 #include <cupt/cache/binarypackage.hpp>
 #include <cupt/cache/sourcepackage.hpp>
 #include <cupt/cache/binaryversion.hpp>
+#include <cupt/cache/sourceversion.hpp>
 #include <cupt/system/state.hpp>
 
 #include "functionselectors.hpp"
@@ -538,6 +539,24 @@ class ProvidesFS: public RegexMatchBaseFS
 	}
 };
 
+class UploadersFS: public RegexMatchBaseFS
+{
+ public:
+	UploadersFS(const Arguments& arguments)
+		: RegexMatchBaseFS(arguments)
+	{}
+ protected:
+	bool _match(const Cache&, const SPCV& v) const
+	{
+		auto version = static_cast< const SourceVersion* >(v);
+		for (const string& uploader: version->uploaders)
+		{
+			if (_matcher.match(uploader)) return true;
+		}
+		return false;
+	}
+};
+
 class BoolMatchFS: public PredicateFS
 {
 	std::function< bool (const Cache&, const SPCV&) > __get_attribute;
@@ -811,8 +830,13 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("reverse-enhances", ReverseDependencyFS(BRT::Enhances, arguments))
 		CONSTRUCT_FS("reverse-replaces", ReverseDependencyFS(BRT::Replaces, arguments))
 
-		CONSTRUCT_FS("provides", ProvidesFS(arguments))
+		CONSTRUCT_FS("version:provides", ProvidesFS(arguments))
 	}
+	else
+	{
+		CONSTRUCT_FS("version:uploaders", UploadersFS(arguments))
+	}
+
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
 	__builtin_unreachable();
 }
@@ -922,6 +946,8 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "v:e", "version:essential" },
 			{ "v:i", "version:installed" },
 			{ "v:d", "version:description" },
+			{ "v:p", "version:provides" },
+			{ "v:u", "version:uploaders" },
 
 			{ "y:pd", "pre-depends" },
 			{ "y:d", "depends" },
@@ -931,7 +957,6 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "y:c", "conflicts" },
 			{ "y:b", "breaks" },
 			{ "y:rp", "replaces" },
-			{ "y:p", "provides" },
 
 			{ "y:r-pd", "reverse-pre-depends" },
 			{ "y:r-d", "reverse-depends" },
@@ -941,7 +966,6 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "y:r-c", "reverse-conflicts" },
 			{ "y:r-b", "reverse-breaks" },
 			{ "y:r-rp", "reverse-replaces" },
-			{ "y:r-p", "reverse-provides" },
 
 			{ "r:a", "release:archive" },
 			{ "r:n", "release:codename" },
