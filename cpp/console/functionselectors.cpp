@@ -895,8 +895,6 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 	{
 		__require_n_arguments(*argumentsPtr, 1);
 		*functionNamePtr = "recursive";
-		// TODO; add recommends
-		// TODO: allow calling 0-argument functions without trailing ()
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
 				"best(and( or(y:pd(%s),y:d(%s),y:r(%s)) , package:installed ))",
