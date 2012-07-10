@@ -50,7 +50,7 @@ DebdeltaHelper::DebdeltaHelper()
 }
 
 vector< DebdeltaHelper::DownloadRecord > DebdeltaHelper::getDownloadInfo(
-		const shared_ptr< const cache::BinaryVersion > version,
+		const cache::BinaryVersion* version,
 		const shared_ptr< const Cache >& cache)
 {
 	vector< DownloadRecord > result;
@@ -113,7 +113,7 @@ vector< DebdeltaHelper::DownloadRecord > DebdeltaHelper::getDownloadInfo(
 			bool found = false;
 			FORIT(sourceIt, version->sources)
 			{
-				const shared_ptr< const ReleaseInfo >& releaseInfo = sourceIt->release;
+				const ReleaseInfo* releaseInfo = sourceIt->release;
 				string releaseValue;
 				if (key == "Origin")
 				{

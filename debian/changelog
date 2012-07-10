@@ -1,8 +1,170 @@
 cupt (2.6.0~) UNRELEASED; urgency=low
 
-  * 
+  * console:
+    - Managing packages:
+      - The option 'cupt::resolver::track-reasons' does not correspond to the
+        console '--show-reasons' option anymore.
+      - New positional action override options '--markauto', '--unmarkauto'.
+      - 'markauto', 'unmarkauto': are now first-class management commands.
+      - Action preview prompt: now properly show reinstalled packages as
+        reinstalled, not as upgraded.
+      - Action preview prompt: removed the 'one expression per line'
+        limitation while processing 'a' choice.
+    - 'shell':
+      - Don't rebuild the cache uselessly when a package management action
+        was suggested but not confirmed by user.
+  * lib:
+    - Removed deprecated functions 'fatal', 'warn', 'debug', 'simulate'.
+    - [API break] '__': now returns 'const char*' instead of 'string'.
+    - cache:
+      - [API break] Pointers to Package and Version objects are now persistent
+        and unique. Thus shared pointers to those objects are no more used in
+        public interfaces.
+      - [API break] PinnedVersion: removed explicit constructor.
+      - [API break] Removed deprecated methods and structures.
+      - [API break] Constructor: removed the argument
+        'packageNameGlobsToReinstall' as not needed anymore.
+    - cache/package:
+      - Apply id version suffixes (^<suffix>) to version strings to
+        differentiate versions with same version string but different hash
+        sums.
+    - cache/relation:
+      - [API break] ArchitecturedRelation, ArchitecturedRelationExpression:
+        constructor from string subrange is now explicit.
+    - config:
+      - Don't store unused APT variables anymore.
+      - New option 'cupt::console::actions-preview::show-reasons'.
+    - cache/version:
+      - [API break] 'operator==': removed, versions can be now compared by
+        pointers' values.
+      - [API break] Source, InitializationParameters: replaced shared_ptr's
+        with pointers.
+      - [API break] InitializationParameters: packageName -> packageNamePtr.
+    - system/resolver:
+      - [API break] SuggestedPackage: new field 'automaticallyInstalledFlag',
+        removed old field 'manuallySelected'.
+      - New method 'setAutomaticallyInstalledFlag'.
+    - system/worker:
+      - [API break] 'setPackagePurgeFlag': now is persistent, and should be
+        called before 'setDesiredState'.
+      - [ABI break] 'Action::Type' new enum value 'Reinstall'.
+    - cache/binarypackage:
+      - 'getInstalledVersion': significant speed-up.
+  * debian:
+    - control:
+      - Bumped the library API version.
 
  -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 08 Apr 2012 10:59:48 +0300
+
+cupt (2.5.7) unstable; urgency=low
+
+  * lib:
+    - cache:
+      - Parsing sources list: parse afterline comments properly. Thanks to
+        Alexey Ivanov for the report. (Closes: #678345)
+  * doc:
+    - tutorial:
+      - 'Disadvantages': said specificly that multiarch is not supported.
+  * po:
+    - Added German translation by Chris Leick. (Closes: #677758)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 28 Jun 2012 14:03:52 +0300
+
+cupt (2.5.6) unstable; urgency=low
+
+  * lib:
+    - system/worker:
+      - Fatal errors should be logged regardless of the logging level.
+      - Work around FreeBSD kernels on which mkdir(2) sometimes return EISDIR.
+        Thanks to goneri@rulezlan.org for the report. (Closes: #675760)
+  * po:
+    - Added French translation by Julien Patriarca. (Closes: #675689)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Fri, 08 Jun 2012 13:01:55 +0300
+
+cupt (2.5.5) unstable; urgency=low
+
+  * lib:
+    - download/methodfactory:
+      - Loading download methods: fixed a crash when a download method library
+        filename without extension contains less than 3 characters. Also,
+        don't output a debug messages in this case when the debugging is not
+        turned on.
+    - cache/sourceversion:
+      - 'parseFromFile': accept the value 'source' as if it was 'extra' for
+        'Priority' field (a workaround for #626394).
+    - Parsing Release files: fixed mixing unknown hash sum types and known
+      hash sum values which leads to a wrong 'hash sums mismatch' error.
+      Thanks to Karol Kozłowski for the report.
+  * debian:
+    - control:
+      - Long description: made more specific about 'option name checker'.
+  * doc:
+    - tutorial:
+      - 'Advantages': said more specificly that 'option name checker' is for
+        the 'cupt::' option family.
+      - 'Disadvantages': explicitly said that Cupt does not currently support
+        repositories without a Release file.
+    - man/cupt.1:
+      - Added the user support mailing list.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Sun, 27 May 2012 12:24:20 +0300
+
+cupt (2.5.4) unstable; urgency=low
+
+  * lib:
+    - system/resolvers/native:
+      - Fixed an internal error when a not installed package was considered
+        but then autoremoved (under certain conditions). This regression was
+        introduced in 2.5.0. Thanks to Karol Kozłowski for the report.
+        (Closes: #672693)
+    - download/methodfactory:
+      - [Jonathan Nieder] 'getDownloadMethodForUri': include the protocol to
+        the 'no download handlers' error message.
+  * po:
+    - Added Slovak translation by Ivan Masár. (Closes: #671793)
+  * debian:
+    - control:
+      - [Jonathan Nieder] Suggest installing a download method in the 'cupt'
+        package description. Thanks to Manuel A. Fernandez Montecelo for the
+        report. (Closes: #672804)
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Tue, 15 May 2012 20:32:36 +0300
+
+cupt (2.5.3) unstable; urgency=low
+
+  * console:
+    - Enable message translations as early as possible. Enables translations
+      for for '--help' command. Thanks to Karol Kozłowski for the report.
+    - 'show', 'showsrc':
+      - Use localized priority strings.
+      - Use localized relation strings.
+    - 'show':
+      - Use localized installed state strings.
+    - 'showrc':
+      - Use localized source package part strings.
+    - 'depends', 'rdepends', 'why':
+      - Use localized binary relation strings.
+  * lib:
+    - system/resolvers/native:
+      - Stopped using unique_ptr<void>, fixing a small memory leak. This
+        regression was introduced in 2.0.0~alpha3.
+      - Fixed another small memory leak, introduced in 2.5.0.
+    - config:
+      - Added a support for the '/* ... */'-comments.
+  * po:
+    - Added Polish translation by Karol Kozłowski. (Closes: #671092)
+    - Added partial Danish translation by Joe Dalton. (Closes: #671119)
+    - getpot:
+      - Set 'report msgid bugs to' field to the development mailing list.
+  * doc:
+    - reference:
+      - Disable jquery-based search.
+  * debian:
+    - control:
+      - Added build-dependency on gettext.
+
+ -- Eugene V. Lyubimkin <jackyf@debian.org>  Thu, 03 May 2012 22:54:26 +0300
 
 cupt (2.5.2) unstable; urgency=low
 

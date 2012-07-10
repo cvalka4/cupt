@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2010 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2010-2012 by Eugene V. Lyubimkin                        *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -15,47 +15,31 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
+#ifndef CUPT_PIPE_SEEN
+#define CUPT_PIPE_SEEN
 
-#ifndef HANDLERS_SEEN
-#define HANDLERS_SEEN
+#include <cupt/common.hpp>
 
-#include "common.hpp"
-#include "misc.hpp"
+namespace cupt {
+namespace internal {
 
-int search(Context&);
-int showBinaryVersions(Context&);
-int showSourceVersions(Context&);
-int showRelations(Context&, bool);
-int dumpConfig(Context&);
-int policy(Context&, bool);
-int shell(Context&);
-int showPackageNames(Context&);
-int findDependencyChain(Context&);
-int updateReleaseAndIndexData(Context&);
-int downloadSourcePackage(Context&);
-int cleanArchives(Context&, bool);
-int showScreenshotUris(Context&);
-int snapshot(Context&);
-int tarMetadata(Context&);
-int showAutoInstalled(Context&);
+struct PipeData;
 
-struct ManagePackages
+class CUPT_API Pipe
 {
-	enum Mode { FullUpgrade, SafeUpgrade, Install, Reinstall, Purge, Remove,
-			Satisfy, Unsatisfy, Markauto, Unmarkauto, BuildDepends, LoadSnapshot,
-			InstallIfInstalled };
-};
-int managePackages(Context&, ManagePackages::Mode);
-int distUpgrade(Context&);
-
-struct ChangelogOrCopyright
-{
-	enum Type { Changelog, Copyright };
+	internal::PipeData* __data;
+	Pipe(const Pipe&);
+ public:
+	Pipe(const string& name);
+	virtual ~Pipe();
+	void useAsReader();
+	void useAsWriter();
+	int getReaderFd();
+	int getWriterFd();
 };
 
-int downloadChangelogOrCopyright(Context& context, ChangelogOrCopyright::Type);
-
-extern bool shellMode;
+}
+}
 
 #endif
 

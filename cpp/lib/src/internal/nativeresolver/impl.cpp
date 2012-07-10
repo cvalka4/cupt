@@ -65,11 +65,8 @@ void NativeResolverImpl::__import_packages_to_reinstall()
 		}
 
 		// this also involves creating new entry in __initial_packages
-		shared_ptr< const BinaryVersion >& targetVersion = __initial_packages[*packageNameIt].version;
-		targetVersion.reset(); // removed by default
-
-		// = this package was not installed by resolver
-		__manually_modified_package_names.insert(*packageNameIt);
+		auto& targetVersion = __initial_packages[*packageNameIt].version;
+		targetVersion = nullptr; // removed by default
 	}
 }
 
@@ -88,8 +85,7 @@ void __mydebug_wrapper(const Solution& solution, size_t id, const Args&... args)
 
 // installs new version, but does not sticks it
 bool NativeResolverImpl::__prepare_version_no_stick(
-		const shared_ptr< const BinaryVersion >& version,
-		dg::InitialPackageEntry& initialPackageEntry)
+		const BinaryVersion* version, dg::InitialPackageEntry& initialPackageEntry)
 {
 	const string& packageName = version->packageName;
 	if (initialPackageEntry.version &&
@@ -113,7 +109,12 @@ bool NativeResolverImpl::__prepare_version_no_stick(
 	return true;
 }
 
-void NativeResolverImpl::installVersion(const shared_ptr< const BinaryVersion >& version)
+void NativeResolverImpl::setAutomaticallyInstalledFlag(const string& packageName, bool flagValue)
+{
+	__auto_status_overrides[packageName] = flagValue;
+}
+
+void NativeResolverImpl::installVersion(const BinaryVersion* version)
 {
 	const string& packageName = version->packageName;
 
@@ -124,7 +125,6 @@ void NativeResolverImpl::installVersion(const shared_ptr< const BinaryVersion >&
 	}
 
 	initialPackageEntry.sticked = true;
-	__manually_modified_package_names.insert(packageName);
 }
 
 void NativeResolverImpl::satisfyRelationExpression(const RelationExpression& relationExpression)
@@ -154,8 +154,7 @@ void NativeResolverImpl::removePackage(const string& packageName)
 	}
 	initialPackageEntry.sticked = true;
 	initialPackageEntry.modified = true;
-	initialPackageEntry.version.reset();
-	__manually_modified_package_names.insert(packageName);
+	initialPackageEntry.version = nullptr;
 
 	if (__config->getBool("debug::resolver"))
 	{
@@ -181,7 +180,7 @@ void NativeResolverImpl::upgrade()
 		auto package = __cache->getBinaryPackage(packageName);
 
 		// if there is original version, then at least one policy version should exist
-		auto supposedVersion = static_pointer_cast< const BinaryVersion >
+		auto supposedVersion = static_cast< const BinaryVersion* >
 				(__cache->getPolicyVersion(package));
 		if (!supposedVersion)
 		{
@@ -233,6 +232,22 @@ SolutionContainer::iterator __full_chooser(SolutionContainer& solutions)
 	return __fair_chooser(solutions);
 }
 
+bool NativeResolverImpl::__compute_target_auto_status(const string& packageName) const
+{
+	auto overrideIt = __auto_status_overrides.find(packageName);
+	if (overrideIt != __auto_status_overrides.end())
+	{
+		return overrideIt->second;
+	}
+
+	if (__old_packages.count(packageName))
+	{
+		return __cache->isAutomaticallyInstalled(packageName);
+	}
+
+	return !__initial_packages.count(packageName);
+}
+
 AutoRemovalPossibility::Allow NativeResolverImpl::__is_candidate_for_auto_removal(const dg::Element* elementPtr)
 {
 	typedef AutoRemovalPossibility::Allow Allow;
@@ -244,7 +259,7 @@ AutoRemovalPossibility::Allow NativeResolverImpl::__is_candidate_for_auto_remova
 	}
 
 	const string& packageName = versionVertex->getPackageName();
-	const shared_ptr< const BinaryVersion >& version = versionVertex->version;
+	auto& version = versionVertex->version;
 
 	if (packageName == __dummy_package_name)
 	{
@@ -254,12 +269,16 @@ AutoRemovalPossibility::Allow NativeResolverImpl::__is_candidate_for_auto_remova
 	{
 		return Allow::No;
 	}
-	if (__manually_modified_package_names.count(packageName))
-	{
-		return Allow::No;
+	{ // checking was the package initially requested
+		auto initialPackageIt = __initial_packages.find(packageName);
+		if (initialPackageIt != __initial_packages.end() && initialPackageIt->second.sticked)
+		{
+			return Allow::No;
+		}
 	}
 
-	return __auto_removal_possibility.isAllowed(*__cache, version, __old_packages.count(packageName));
+	return __auto_removal_possibility.isAllowed(version, __old_packages.count(packageName),
+			__compute_target_auto_status(packageName));
 }
 
 bool NativeResolverImpl::__clean_automatically_installed(Solution& solution)
@@ -391,7 +410,7 @@ SolutionChooser __select_solution_chooser(const Config& config)
 void NativeResolverImpl::__require_strict_relation_expressions()
 {
 	// "installing" virtual package, which will be used for strict '(un)satisfy' requests
-	shared_ptr< BinaryVersion > version(new BinaryVersion);
+	auto version = &__custom_relations_version;
 
 	version->packageName = __dummy_package_name;
 	version->sourcePackageName = __dummy_package_name;
@@ -437,17 +456,16 @@ void NativeResolverImpl::__pre_apply_action(const Solution& originalSolution,
 
 void NativeResolverImpl::__calculate_profits(vector< unique_ptr< Action > >& actions) const
 {
-	auto getVersion = [](const dg::Element* elementPtr) -> shared_ptr< const BinaryVersion >
+	auto getVersion = [](const dg::Element* elementPtr) -> const BinaryVersion*
 	{
-		static shared_ptr< const BinaryVersion > emptyVersion;
 		if (!elementPtr)
 		{
-			return emptyVersion;
+			return nullptr;
 		}
 		auto versionVertex = dynamic_cast< const dg::VersionVertex* >(elementPtr);
 		if (!versionVertex)
 		{
-			return emptyVersion;
+			return nullptr;
 		}
 		return versionVertex->version;
 	};
@@ -531,7 +549,7 @@ void NativeResolverImpl::__post_apply_action(Solution& solution)
 	{
 		fatal2i("__post_apply_action: no action to apply");
 	}
-	const Action& action = *(static_cast< const Action* >(solution.pendingAction.get()));
+	const Action& action = *solution.pendingAction;
 
 	{ // process elements to reject
 		FORIT(elementPtrIt, action.elementsToReject)
@@ -691,6 +709,17 @@ void NativeResolverImpl::__prepare_reject_requests(vector< unique_ptr< Action > 
 		{
 			actionPtr->elementsToReject = elementPtrs; // all
 		}
+		else
+		{
+			const auto& uselessToRejectElements = SolutionStorage::getConflictingElements(actionPtr->newElementPtr);
+			auto deleteIt = std::remove_if(actionPtr->elementsToReject.begin(), actionPtr->elementsToReject.end(),
+					[&uselessToRejectElements](const dg::Element* elementPtr)
+					{
+						return std::find(uselessToRejectElements.begin(), uselessToRejectElements.end(), elementPtr) !=
+								uselessToRejectElements.end();
+					});
+			actionPtr->elementsToReject.erase(deleteIt, actionPtr->elementsToReject.end());
+		}
 	}
 }
 
@@ -714,6 +743,10 @@ Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 		{
 			const string& packageName = vertex->getPackageName();
 			if (packageName == __dummy_package_name)
+			{
+				continue;
+			}
+			if (!vertex->version && !__initial_packages.count(packageName))
 			{
 				continue;
 			}
@@ -741,7 +774,7 @@ Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 					}
 				}
 			}
-			suggestedPackage.manuallySelected = __manually_modified_package_names.count(packageName);
+			suggestedPackage.automaticallyInstalledFlag = __compute_target_auto_status(packageName);
 		}
 		else
 		{

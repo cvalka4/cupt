@@ -26,7 +26,12 @@ namespace internal {
 namespace cachefiles {
 
 typedef Cache::IndexEntry IndexEntry;
-typedef Cache::IndexDownloadRecord FileDownloadRecord;
+struct FileDownloadRecord
+{
+	string uri;
+	uint32_t size;
+	HashSums hashSums;
+};
 
 string getPathOfIndexList(const Config&, const IndexEntry&);
 string getPathOfReleaseList(const Config&, const IndexEntry&);
@@ -38,9 +43,6 @@ vector< FileDownloadRecord > getDownloadInfoOfIndexList(
 
 vector< pair< string, string > > getPathsOfLocalizedDescriptions(
 		const Config&, const IndexEntry& entry);
-// TODO/API break/: deprecated, delete it
-vector< Cache::LocalizationDownloadRecord > getDownloadInfoOfLocalizedDescriptions(
-		const Config&, const IndexEntry&);
 
 vector< FileDownloadRecord > getDownloadInfoOfLocalizationIndex(
 		const Config&, const IndexEntry&);

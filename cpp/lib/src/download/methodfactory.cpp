@@ -69,7 +69,7 @@ MethodFactoryImpl::~MethodFactoryImpl()
 #else
 	#define QUOTED(x) QUOTED_(x)
 	#define QUOTED_(x) # x
-	const string downloadMethodPath = "/usr/lib/cupt2-" QUOTED(SOVERSION) "/downloadmethods/";
+	const string downloadMethodPath = "/usr/lib/cupt3-" QUOTED(SOVERSION) "/downloadmethods/";
 	#undef QUOTED
 	#undef QUOTED_
 #endif
@@ -92,7 +92,11 @@ void MethodFactoryImpl::__load_methods()
 			// also, it should start with 'lib'
 			if (methodName.size() < 4 || methodName.compare(0, 3, "lib"))
 			{
-				debug2("the method filename '%s' does not start with 'lib', discarding it", methodName);
+				if (debugging)
+				{
+					debug2("the method filename '%s' does not start with 'lib', discarding it", methodName);
+				}
+				continue;
 			}
 			methodName = methodName.substr(3);
 		}
@@ -170,7 +174,7 @@ download::Method* MethodFactoryImpl::getDownloadMethodForUri(const download::Uri
 		return (methodBuilderIt->second)();
 	}
 
-	fatal2(__("no download handlers available"));
+	fatal2(__("no download handlers available for the protocol '%s'"), protocol);
 	return NULL; // unreachable
 }
 

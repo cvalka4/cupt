@@ -121,14 +121,14 @@ string getPathOfIndexList(const Config& config, const IndexEntry& entry)
 	return basePath + "_" + indexListSuffix;
 }
 
-static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
+static vector< FileDownloadRecord > getDownloadInfoFromRelease(
 		const Config& config, const IndexEntry& indexEntry, const string& suffix)
 {
 	auto baseUri = getUriOfIndexEntry(indexEntry);
 	// TODO: make cachefiles::getAlias* functions
 	auto alias = indexEntry.uri + ' ' + indexEntry.distribution;
 
-	vector< Cache::IndexDownloadRecord > result;
+	vector< FileDownloadRecord > result;
 
 	try
 	{
@@ -158,12 +158,12 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 			{
 				currentHashSumType = HashSums::SHA256;
 			}
-			else if (line.find(suffix) != string::npos)
+			else if (line.empty() || !isspace(line[0])) // end of hash sum block
 			{
-				if (currentHashSumType == HashSums::Count)
-				{
-					fatal2(__("no hash sum declarations before the line '%s'"), line);
-				}
+				currentHashSumType = HashSums::Count;
+			}
+			else if (currentHashSumType != HashSums::Count && line.find(suffix) != string::npos)
+			{
 				static sregex hashSumsLineRegex = sregex::compile("\\s([[:xdigit:]]+)\\s+(\\d+)\\s+(.*)");
 				if (!regex_match(line, m, hashSumsLineRegex))
 				{
@@ -190,8 +190,8 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 				}
 				if (!foundRecord)
 				{
-					Cache::IndexDownloadRecord& record =
-							(result.push_back(Cache::IndexDownloadRecord()), *(result.rbegin()));
+					FileDownloadRecord& record =
+							(result.push_back(FileDownloadRecord()), *(result.rbegin()));
 					record.uri = uri;
 					record.size = string2uint32(m[2]);
 					record.hashSums[currentHashSumType] = m[1];
@@ -215,7 +215,7 @@ static vector< Cache::IndexDownloadRecord > getDownloadInfoFromRelease(
 	return result;
 }
 
-vector< Cache::IndexDownloadRecord > getDownloadInfoOfIndexList(
+vector< FileDownloadRecord > getDownloadInfoOfIndexList(
 		const Config& config, const IndexEntry& indexEntry)
 {
 	return getDownloadInfoFromRelease(config, indexEntry,
@@ -303,27 +303,6 @@ vector< pair< string, string > > getPathsOfLocalizedDescriptions(
 	{
 		auto path = basePath + "_" + join("_", chunkArray);
 		result.push_back({ extractLocalizationLanguage(chunkArray.back()), std::move(path) });
-	}
-
-	return result;
-}
-
-vector< Cache::LocalizationDownloadRecord > getDownloadInfoOfLocalizedDescriptions(
-		const Config& config, const IndexEntry& entry)
-{
-	auto chunkArrays = getChunksOfLocalizedDescriptions(config, entry);
-	auto basePath = getPathOfIndexEntry(config, entry);
-	auto baseUri = getUriOfIndexEntry(entry);
-
-	vector< Cache::LocalizationDownloadRecord > result;
-
-	FORIT(chunkArrayIt, chunkArrays)
-	{
-		Cache::LocalizationDownloadRecord record;
-		record.localPath = basePath + "_" + join("_", *chunkArrayIt);
-		// yes, somewhy translations are always bzip2'ed
-		record.uri = baseUri + "/" + join("/", *chunkArrayIt) + ".bz2";
-		result.push_back(std::move(record));
 	}
 
 	return result;

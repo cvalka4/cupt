@@ -29,13 +29,13 @@
 namespace cupt {
 namespace cache {
 
-shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::InitializationParameters& initParams)
+SourceVersion* SourceVersion::parseFromFile(const Version::InitializationParameters& initParams)
 {
-	auto v = std::make_shared< SourceVersion >();
+	auto v = new SourceVersion;
 
 	Source source;
 
-	v->packageName = initParams.packageName;
+	v->packageName = *initParams.packageNamePtr;
 	source.release = initParams.releaseInfo;
 
 	v->priority = Version::Priorities::Extra; // default value if not specified
@@ -44,7 +44,7 @@ shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::Initiali
 		// go to starting byte of the entry
 		initParams.file->seek(initParams.offset);
 
-		internal::TagParser parser(initParams.file.get());
+		internal::TagParser parser(initParams.file);
 		internal::TagParser::StringRange tagName, tagValue;
 
 		static const sregex checksumsLineRegex = sregex::compile(" ([[:xdigit:]]+) +(\\d+) +(.*)", regex_constants::optimize);
@@ -131,6 +131,10 @@ shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::Initiali
 			})
 			TAG(Directory, source.directory = tagValue;)
 			TAG(Version, v->versionString = tagValue;)
+			if (tagName.equal(BUFFER_AND_SIZE("Priority")) && tagValue.equal(BUFFER_AND_SIZE("source")))
+			{
+				continue; // a workaround for the unannounced value 'source' (Debian BTS #626394)
+			}
 			PARSE_PRIORITY
 			TAG(Architecture, v->architectures = internal::split(' ', tagValue);)
 
@@ -170,9 +174,9 @@ shared_ptr< SourceVersion > SourceVersion::parseFromFile(const Version::Initiali
 	return v;
 }
 
-bool SourceVersion::areHashesEqual(const shared_ptr< const Version >& other) const
+bool SourceVersion::areHashesEqual(const Version* other) const
 {
-	shared_ptr< const SourceVersion > o = dynamic_pointer_cast< const SourceVersion >(other);
+	auto o = dynamic_cast< const SourceVersion* >(other);
 	if (!o)
 	{
 		fatal2i("areHashesEqual: non-source version parameter");
@@ -198,10 +202,10 @@ bool SourceVersion::areHashesEqual(const shared_ptr< const Version >& other) con
 }
 
 const string SourceVersion::FileParts::strings[] = {
-	__("Tarball"), __("Diff"), __("Dsc")
+	N__("Tarball"), N__("Diff"), N__("Dsc")
 };
 const string SourceVersion::RelationTypes::strings[] = {
-	__("Build-Depends"), __("Build-Depends-Indep"), __("Build-Conflicts"), __("Build-Conflicts-Indep"),
+	N__("Build-Depends"), N__("Build-Depends-Indep"), N__("Build-Conflicts"), N__("Build-Conflicts-Indep"),
 };
 const char* SourceVersion::RelationTypes::rawStrings[] = {
 	"build-depends", "build-depend-indep", "build-conflicts", "build-conflicts-indep",

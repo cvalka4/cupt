@@ -80,12 +80,12 @@ class CUPT_API Resolver
 	 */
 	struct RelationExpressionReason: public Reason
 	{
-		shared_ptr< const BinaryVersion > version; ///< version that caused the change
+		const BinaryVersion* version; ///< version that caused the change
 		BinaryVersion::RelationTypes::Type dependencyType; ///< type of dependency that caused the change
 		RelationExpression relationExpression; ///< relation expression which caused the change
 
 		/// trivial constructor
-		RelationExpressionReason(const shared_ptr< const BinaryVersion >&,
+		RelationExpressionReason(const BinaryVersion*,
 				BinaryVersion::RelationTypes::Type, const RelationExpression&);
 		virtual string toString() const;
 	};
@@ -97,11 +97,11 @@ class CUPT_API Resolver
 	 */
 	struct SynchronizationReason: public Reason
 	{
-		shared_ptr< const BinaryVersion > version; ///< version that caused the change
+		const BinaryVersion* version; ///< version that caused the change
 		string relatedPackageName; ///< name of related binary package
 
 		/// trivial constructor
-		SynchronizationReason(const shared_ptr< const BinaryVersion >&, const string&);
+		SynchronizationReason(const BinaryVersion*, const string&);
 		virtual string toString() const;
 	};
 
@@ -111,9 +111,8 @@ class CUPT_API Resolver
 	 */
 	struct SuggestedPackage
 	{
-		shared_ptr< const BinaryVersion > version; ///< package version
-		// TODO/API break/: change the field to 'automaticallyInstalledFlag'
-		bool manuallySelected; ///< was this package version selected by user, not resolver?
+		const BinaryVersion* version; ///< package version
+		bool automaticallyInstalledFlag;
 		vector< shared_ptr< const Reason > > reasons; ///< list of resolver reasons if tracked
 	};
 	typedef map< string, SuggestedPackage > SuggestedPackages; ///< suggested set of packages
@@ -143,7 +142,7 @@ class CUPT_API Resolver
 	/**
 	 * Requests installation of the specific version.
 	 */
-	virtual void installVersion(const shared_ptr< const BinaryVersion >&) = 0;
+	virtual void installVersion(const BinaryVersion*) = 0;
 	/**
 	 * Requests that specified relation expression is satisfied.
 	 */
@@ -162,6 +161,12 @@ class CUPT_API Resolver
 	 * Requests an upgrade of all installed packages (to their policy version).
 	 */
 	virtual void upgrade() = 0;
+	/**
+	 * Requests that if a solution will have the package @a packageName,
+	 * its corresponding Offer::SuggestedPackage::automaticallyInstalledFlag
+	 * will have the value of @a flagValue.
+	 */
+	virtual void setAutomaticallyInstalledFlag(const string& packageName, bool flagValue) = 0;
 
 	/// perform a resolve computations
 	/**

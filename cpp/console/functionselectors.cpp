@@ -34,7 +34,7 @@ FunctionSelector::~FunctionSelector()
 namespace {
 
 typedef FunctionSelector FS;
-typedef shared_ptr< const Version > SPCV;
+typedef const Version* SPCV; // former shared_ptr< const Version >
 typedef list< SPCV > FSResult;
 typedef BinaryVersion::RelationTypes BRT;
 
@@ -84,10 +84,10 @@ class VersionSetGetter
 		std::sort(result.begin(), result.end());
 		return result;
 	}
-	shared_ptr< const Package > __get_package(const string& packageName) const
+	const Package* __get_package(const string& packageName) const
 	{
-		return __binary ? shared_ptr< const Package >(__cache.getBinaryPackage(packageName))
-				: shared_ptr< const Package >(__cache.getSourcePackage(packageName));
+		return __binary ? (const Package*)__cache.getBinaryPackage(packageName)
+				: (const Package*)__cache.getSourcePackage(packageName);
 	}
 	void __add_package_to_result(const string& packageName, FSResult* result) const
 	{
@@ -241,7 +241,7 @@ FSResult __filter_through(const Cache& cache, const FSResult& versions, const Ve
 void __merge_fsresults(const Cache& cache, FSResult& main, FSResult&& other)
 {
 	main.merge(std::move(other), SpcvGreater(cache));
-	main.unique(PointerEqual< const Version >());
+	main.unique();
 }
 
 class BestFS: public CommonFS
@@ -526,7 +526,7 @@ class ProvidesFS: public RegexMatchBaseFS
  protected:
 	bool _match(const Cache&, const SPCV& v) const
 	{
-		auto version = static_pointer_cast< const BinaryVersion >(v);
+		auto version = static_cast< const BinaryVersion* >(v);
 		for (const string& virtualPackageName: version->provides)
 		{
 			if (_matcher.match(virtualPackageName))
@@ -655,7 +655,7 @@ class DependencyFS: public TransformFS
 		SpcvGreater spcvGreater(cache);
 		FSResult result;
 
-		auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
+		auto binaryVersion = static_cast< const BinaryVersion* >(version);
 		for (const auto& relationExpression: binaryVersion->relations[__relation_type])
 		{
 			auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
@@ -687,9 +687,9 @@ class ReverseDependencyFS: public TransformFS
 
 		FSResult result;
 
-		auto binaryVersion = static_pointer_cast< const BinaryVersion >(version);
+		auto binaryVersion = static_cast< const BinaryVersion* >(version);
 		foreachReverseDependency(cache, __reverse_index, binaryVersion, __relation_type,
-				[&cache, &result](const shared_ptr< const BinaryVersion >& reverseVersion, const RelationExpression&)
+				[&cache, &result](const BinaryVersion* reverseVersion, const RelationExpression&)
 				{
 					__merge_fsresults(cache, result, { reverseVersion });
 				});
@@ -732,7 +732,7 @@ namespace attr
 {
 	string description(const Cache& cache, const SPCV& version)
 	{
-		auto v = static_pointer_cast< const BinaryVersion >(version);
+		auto v = static_cast< const BinaryVersion* >(version);
 		// TODO/API break/: make it return one, localized if possible, always non-empty string
 		auto descriptions = cache.getLocalizedDescriptions(v);
 		const string& shortDescription = descriptions.first.empty() ? v->shortDescription : descriptions.first;
@@ -751,7 +751,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	#define VERSION_MEMBER(member) [](const Cache&, const SPCV& version) { return version-> member; }
 	#define VERSION_RELEASE_MEMBER(member) [](const Version::Source& source) { return source.release-> member; }
 	#define BINARY_VERSION_MEMBER(member) [](const Cache&, const SPCV& version) \
-			{ return static_cast< const BinaryVersion* >(version.get())-> member; }
+			{ return static_cast< const BinaryVersion* >(version)-> member; }
 	#define CONSTRUCT_FS(name, code) if (functionName == name) { return new code; }
 	#define CONSTRUCT_RELEASE_MEMBER_FS(name, member) \
 			CONSTRUCT_FS(name, SourceRegexMatchFS(VERSION_RELEASE_MEMBER(member), arguments))
@@ -1015,7 +1015,6 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 unique_ptr< FS > parseFunctionQuery(const string& query, bool binary)
 {
 	Cache::memoize = true;
-	Package::memoize = true;
 
 	auto trimmedQuery = query;
 	trim(trimmedQuery);

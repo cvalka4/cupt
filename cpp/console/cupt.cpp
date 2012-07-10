@@ -29,6 +29,7 @@ void showHelp(const char*);
 
 int main(int argc, char* argv[])
 {
+	setlocale(LC_ALL, "");
 	cupt::messageFd = STDERR_FILENO;
 
 	if (argc > 1)
@@ -58,17 +59,15 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	string command;
 	Context context;
-	return mainEx(argc, argv, context, command);
+	return mainEx(argc, argv, context);
 }
 
-int mainEx(int argc, char* argv[], Context& context, string& command)
+int mainEx(int argc, char* argv[], Context& context)
 {
-	setlocale(LC_ALL, "");
 	try
 	{
-		command = parseCommonOptions(argc, argv, /* in */ *context.getConfig(),
+		auto command = parseCommonOptions(argc, argv, /* in */ *context.getConfig(),
 				/* out */ context.unparsed);
 		context.argc = argc;
 		context.argv = argv;
@@ -142,8 +141,8 @@ void showHelp(const char* argv0)
 	cout << format2(__("Usage: %s <action> [<parameters>]"), argv0) << endl;
 	cout << endl;
 	cout << __("Actions:") << endl;
-	FORIT(it, actionDescriptions)
+	for (const auto& pair: actionDescriptions)
 	{
-		cout << "  " << it->first << ": " << it->second << endl;
+		cout << "  " << pair.first << ": " << pair.second << endl;
 	}
 }

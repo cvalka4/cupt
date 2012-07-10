@@ -36,10 +36,8 @@ class FunctionSelector
 
 unique_ptr< FunctionSelector > parseFunctionQuery(const string&, bool);
 
-list< shared_ptr< const Version > > selectAllVersions(
-		const Cache&, const FunctionSelector&);
-list< shared_ptr< const Version > > selectBestVersions(
-		const Cache&, const FunctionSelector&);
+list< const Version* > selectAllVersions(const Cache&, const FunctionSelector&);
+list< const Version* > selectBestVersions(const Cache&, const FunctionSelector&);
 
 #endif
 

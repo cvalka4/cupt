@@ -58,8 +58,8 @@ ReverseDependsIndexType computeReverseDependsIndex(const Cache& cache,
 }
 
 void foreachReverseDependency(const Cache& cache, const ReverseDependsIndexType& index,
-		const shared_ptr< const BinaryVersion >& version, BRT::Type relationType,
-		const std::function< void (const shared_ptr< const BinaryVersion >&, const RelationExpression&) > callback)
+		const BinaryVersion* version, BRT::Type relationType,
+		const std::function< void (const BinaryVersion*, const RelationExpression&) > callback)
 {
 	auto packageCandidateNamesIt = index.find(version->packageName);
 	if (packageCandidateNamesIt != index.end())
@@ -77,7 +77,7 @@ void foreachReverseDependency(const Cache& cache, const ReverseDependsIndexType&
 					auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
 					for (const auto& satisfyingVersion: satisfyingVersions)
 					{
-						if (*satisfyingVersion == *version)
+						if (satisfyingVersion == version)
 						{
 							callback(candidateVersion, relationExpression);
 							goto candidate;

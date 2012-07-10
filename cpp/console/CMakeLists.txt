@@ -12,6 +12,6 @@ add_executable(cupt.bin
 	colorizer.cpp
 	functionselectors.cpp
 	selectors.cpp)
-target_link_libraries(cupt.bin cupt2 boost_program_options)
+target_link_libraries(cupt.bin cupt3 boost_program_options)
 
 install(PROGRAMS cupt.bin DESTINATION bin RENAME cupt)

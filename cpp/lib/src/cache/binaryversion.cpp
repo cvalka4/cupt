@@ -26,14 +26,14 @@
 namespace cupt {
 namespace cache {
 
-shared_ptr< BinaryVersion > BinaryVersion::parseFromFile(const Version::InitializationParameters& initParams)
+BinaryVersion* BinaryVersion::parseFromFile(const Version::InitializationParameters& initParams)
 {
-	auto v = std::make_shared< BinaryVersion >();
+	auto v = new BinaryVersion;
 
 	Source source;
 
 	v->essential = false;
-	v->packageName = initParams.packageName;
+	v->packageName = *initParams.packageNamePtr;
 	source.release = initParams.releaseInfo;
 
 	v->installedSize = 0;
@@ -44,7 +44,7 @@ shared_ptr< BinaryVersion > BinaryVersion::parseFromFile(const Version::Initiali
 		// go to starting byte of the entry
 		initParams.file->seek(initParams.offset);
 
-		internal::TagParser parser(initParams.file.get());
+		internal::TagParser parser(initParams.file);
 		internal::TagParser::StringRange tagName, tagValue;
 
 		while (parser.parseNextLine(tagName, tagValue))
@@ -168,9 +168,9 @@ bool BinaryVersion::isInstalled() const
 	return sources.empty() ? false : sources[0].release->baseUri.empty();
 }
 
-bool BinaryVersion::areHashesEqual(const shared_ptr< const Version >& other) const
+bool BinaryVersion::areHashesEqual(const Version* other) const
 {
-	shared_ptr< const BinaryVersion > o = dynamic_pointer_cast< const BinaryVersion >(other);
+	auto o = dynamic_cast< const BinaryVersion* >(other);
 	if (!o)
 	{
 		fatal2i("areHashesEqual: non-binary version parameter");
@@ -179,8 +179,8 @@ bool BinaryVersion::areHashesEqual(const shared_ptr< const Version >& other) con
 }
 
 const string BinaryVersion::RelationTypes::strings[] = {
-	__("Pre-Depends"), __("Depends"), __("Recommends"), __("Suggests"),
-	__("Enhances"), __("Conflicts"), __("Breaks"), __("Replaces")
+	N__("Pre-Depends"), N__("Depends"), N__("Recommends"), N__("Suggests"),
+	N__("Enhances"), N__("Conflicts"), N__("Breaks"), N__("Replaces")
 };
 const char* BinaryVersion::RelationTypes::rawStrings[] = {
 	"pre-depends", "depends", "recommends", "suggests",

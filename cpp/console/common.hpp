@@ -39,8 +39,8 @@ bool isPackageInstalled(const Cache&, const string& packageName);
 ReverseDependsIndexType computeReverseDependsIndex(
 		const Cache&, const vector< BinaryVersion::RelationTypes::Type >& relationTypes);
 void foreachReverseDependency(const Cache&, const ReverseDependsIndexType&,
-		const shared_ptr< const BinaryVersion >& version, BinaryVersion::RelationTypes::Type relationType,
-		const std::function< void (const shared_ptr< const BinaryVersion >&, const RelationExpression&) > callback);
+		const BinaryVersion* version, BinaryVersion::RelationTypes::Type relationType,
+		const std::function< void (const BinaryVersion*, const RelationExpression&) > callback);
 
 #endif
 

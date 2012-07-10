@@ -92,17 +92,6 @@ void ConfigImpl::initializeVariables()
 		{ "gpgv::trustedkeyring", "/var/lib/cupt/trusted.gpg" },
 		{ "quiet", "0" }, // bool, '0' instead of 'no' for apt-listchanges (#604130)
 
-		// TODO/API break/: remove unused APT scalar&list variables as don't
-		// warn about unknown variables anymore
-		// unused APT vars
-		{ "apt::cache-limit", "0" },
-		{ "apt::get::show-upgraded", "no" },
-		{ "apt::get::build-dep-automatic", "yes" },
-		{ "acquire::pdiffs", "yes" },
-		{ "dir::log", "var/log/apt" },
-		{ "dir::log::history", "history.log" },
-		{ "dir::log::terminal", "term.log" },
-
 		// Cupt vars
 		{ "cupt::cache::limit-releases::by-archive::type", "none" },
 		{ "cupt::cache::limit-releases::by-codename::type", "none" },
@@ -118,6 +107,7 @@ void ConfigImpl::initializeVariables()
 		{ "cupt::console::actions-preview::show-components", "no" },
 		{ "cupt::console::actions-preview::show-not-preferred", "for-upgrades" },
 		{ "cupt::console::actions-preview::show-details", "yes" },
+		{ "cupt::console::actions-preview::show-reasons", "no" },
 		{ "cupt::console::actions-preview::show-size-changes", "no" },
 		{ "cupt::console::actions-preview::show-summary", "yes" },
 		{ "cupt::console::actions-preview::show-vendors", "no" },
@@ -216,16 +206,6 @@ void ConfigImpl::initializeVariables()
 		"dpkg::tools::options::*",
 		"dpkg::tools::options::*::*",
 
-		// unused APT vars
-		"acquire::cdrom::*",
-		"acquire::compressiontypes::*",
-		"apt::archives::*",
-		"apt::periodic::*",
-		"aptlistbugs::*",
-		"unattended-upgrade::*",
-		"aptitude::*",
-		"dselect::*",
-
 		// used Cupt vars
 		"cupt::downloader::protocols::*::priority",
 		"cupt::downloader::protocols::*::methods",
@@ -243,12 +223,6 @@ void ConfigImpl::initializeVariables()
 		{ "dpkg::pre-install-pkgs", vector< string > {} },
 		{ "dpkg::pre-invoke", vector< string > {} },
 		{ "dpkg::post-invoke", vector< string > {} },
-
-		// unused APT vars
-		{ "rpm::pre-invoke", vector< string > {} },
-		{ "rpm::post-invoke", vector< string > {} },
-		{ "acquire::languages", vector< string > {} },
-		{ "apt::never-markauto-sections", vector< string > {} },
 
 		// Cupt vars
 		{ "cupt::cache::limit-releases::by-archive", vector< string > {} },
@@ -530,7 +504,7 @@ vector< string > Config::getList(const string& optionName) const
 
 bool __is_cupt_option(const string& optionName)
 {
-	return optionName.size() >= 6 && optionName.compare(0, 6, "cupt::") == 0;
+	return optionName.compare(0, 6, "cupt::") == 0;
 }
 
 void Config::setScalar(const string& optionName, const string& value)

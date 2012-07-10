@@ -25,27 +25,18 @@
 #include <cupt/system/state.hpp>
 
 #include <internal/cacheimpl.hpp>
-#include <internal/regex.hpp>
 #include <internal/cachefiles.hpp>
 #include <internal/filesystem.hpp>
-
-// TODO/API break/: remove deprecated entities
 
 namespace cupt {
 
 typedef internal::CacheImpl::PrePackageRecord PrePackageRecord;
 
-Cache::Cache(shared_ptr< const Config > config, bool useSource, bool useBinary, bool useInstalled,
-		const vector< string >& packageNameGlobsToReinstall)
+Cache::Cache(shared_ptr< const Config > config, bool useSource, bool useBinary, bool useInstalled)
 {
 	__impl = new internal::CacheImpl;
 	__impl->config = config;
 	__impl->binaryArchitecture.reset(new string(config->getString("apt::architecture")));
-
-	FORIT(it, packageNameGlobsToReinstall)
-	{
-		__impl->packageNameRegexesToReinstall.push_back(internal::globToRegex(*it));
-	}
 
 	{ // ugly hack to copy trusted keyring from APT whenever possible, see #647001
 		auto cuptKeyringPath = config->getString("gpgv::trustedkeyring");
@@ -94,36 +85,6 @@ vector< Cache::IndexEntry > Cache::getIndexEntries() const
 	return __impl->indexEntries;
 }
 
-string Cache::getPathOfIndexList(const IndexEntry& entry) const
-{
-	return internal::cachefiles::getPathOfIndexList(*__impl->config, entry);
-}
-
-string Cache::getPathOfReleaseList(const IndexEntry& entry) const
-{
-	return internal::cachefiles::getPathOfReleaseList(*__impl->config, entry);
-}
-
-string Cache::getPathOfExtendedStates() const
-{
-	return internal::cachefiles::getPathOfExtendedStates(*__impl->config);
-}
-
-string Cache::getDownloadUriOfReleaseList(const IndexEntry& entry) const
-{
-	return internal::cachefiles::getDownloadUriOfReleaseList(entry);
-}
-
-vector< Cache::IndexDownloadRecord > Cache::getDownloadInfoOfIndexList(const IndexEntry& entry) const
-{
-	return internal::cachefiles::getDownloadInfoOfIndexList(*__impl->config, entry);
-}
-
-vector< Cache::LocalizationDownloadRecord > Cache::getDownloadInfoOfLocalizedDescriptions(const IndexEntry& entry) const
-{
-	return internal::cachefiles::getDownloadInfoOfLocalizedDescriptions(*__impl->config, entry);
-}
-
 vector< string > Cache::getBinaryPackageNames() const
 {
 	vector< string > result;
@@ -144,66 +105,46 @@ vector< string > Cache::getSourcePackageNames() const
 	return result;
 }
 
-shared_ptr< const BinaryPackage > Cache::getBinaryPackage(const string& packageName) const
+const BinaryPackage* Cache::getBinaryPackage(const string& packageName) const
 {
 	return __impl->getBinaryPackage(packageName);
 }
 
-shared_ptr< const SourcePackage > Cache::getSourcePackage(const string& packageName) const
+const SourcePackage* Cache::getSourcePackage(const string& packageName) const
 {
 	return __impl->getSourcePackage(packageName);
 }
 
-ssize_t Cache::getPin(const shared_ptr< const Version >& version) const
+ssize_t Cache::getPin(const Version* version) const
 {
-	auto getInstalledVersionString = [this, &version]()
+	auto getBinaryPackageFromVersion = [this, &version]() -> const BinaryPackage*
 	{
-		if (dynamic_pointer_cast< const BinaryVersion >(version))
+		if (dynamic_cast< const BinaryVersion* >(version))
 		{
-			auto package = getBinaryPackage(version->packageName);
-			if (package)
-			{
-				auto installedVersion = package->getInstalledVersion();
-				if (installedVersion)
-				{
-					return installedVersion->versionString;
-				}
-			}
+			return getBinaryPackage(version->packageName);
 		}
-		return string();
+		else
+		{
+			return nullptr;
+		}
 	};
 
-	return __impl->getPin(version, getInstalledVersionString);
+	return __impl->getPin(version, getBinaryPackageFromVersion);
 }
 
-vector< Cache::PinnedVersion > Cache::getSortedPinnedVersions(const shared_ptr< const Package >& package) const
+vector< Cache::PinnedVersion > Cache::getSortedPinnedVersions(const Package* package) const
 {
 	vector< Cache::PinnedVersion > result;
 
 	auto versions = package->getVersions();
 
-	string installedVersionString;
-	bool ivsIsSet = false;
-	auto getInstalledVersionString = [&installedVersionString, &ivsIsSet, &package]()
+	auto getBinaryPackage = [&package]()
 	{
-		if (!ivsIsSet)
-		{
-			if (auto binaryPackage = dynamic_pointer_cast< const BinaryPackage >(package))
-			{
-				auto installedVersion = binaryPackage->getInstalledVersion();
-				if (installedVersion)
-				{
-					installedVersionString = installedVersion->versionString;
-				}
-			}
-			ivsIsSet = true;
-		}
-		return installedVersionString;
+		return dynamic_cast< const BinaryPackage* >(package);
 	};
-
 	for (const auto& version: versions)
 	{
-		result.push_back(PinnedVersion(version, __impl->getPin(version, getInstalledVersionString)));
+		result.push_back(PinnedVersion { version, __impl->getPin(version, getBinaryPackage) });
 	}
 
 	auto sorter = [](const PinnedVersion& left, const PinnedVersion& right) -> bool
@@ -226,13 +167,13 @@ vector< Cache::PinnedVersion > Cache::getSortedPinnedVersions(const shared_ptr< 
 	return result;
 }
 
-shared_ptr< const Version > Cache::getPolicyVersion(const shared_ptr< const Package >& package) const
+const Version* Cache::getPolicyVersion(const Package* package) const
 {
 	auto sortedPinnedVersions = getSortedPinnedVersions(package);
 	// not assuming the package have at least valid version...
 	if (sortedPinnedVersions.empty())
 	{
-		return shared_ptr< const Version >();
+		return nullptr;
 	}
 	else
 	{
@@ -251,15 +192,15 @@ bool Cache::isAutomaticallyInstalled(const string& packageName) const
 	return __impl->extendedInfo.automaticallyInstalled.count(packageName);
 }
 
-vector< shared_ptr< const BinaryVersion > >
+vector< const BinaryVersion* >
 Cache::getSatisfyingVersions(const RelationExpression& relationExpression) const
 {
 	return __impl->getSatisfyingVersions(relationExpression);
 }
 
-vector< shared_ptr< const BinaryVersion > > Cache::getInstalledVersions() const
+vector< const BinaryVersion* > Cache::getInstalledVersions() const
 {
-	vector< shared_ptr< const BinaryVersion > > result;
+	vector< const BinaryVersion* > result;
 
 	auto packageNames = __impl->systemState->getInstalledPackageNames();
 	result.reserve(packageNames.size());
@@ -287,7 +228,7 @@ const Cache::ExtendedInfo& Cache::getExtendedInfo() const
 	return __impl->extendedInfo;
 }
 
-pair< string, string > Cache::getLocalizedDescriptions(const shared_ptr< const BinaryVersion >& version) const
+pair< string, string > Cache::getLocalizedDescriptions(const BinaryVersion* version) const
 {
 	return __impl->getLocalizedDescriptions(version);
 }
@@ -298,7 +239,7 @@ bool Cache::verifySignature(const shared_ptr< const Config >& config, const stri
 	return internal::cachefiles::verifySignature(*config, path, path);
 }
 
-string Cache::getPathOfCopyright(const shared_ptr< const BinaryVersion >& version)
+string Cache::getPathOfCopyright(const BinaryVersion* version)
 {
 	if (!version->isInstalled())
 	{
@@ -308,7 +249,7 @@ string Cache::getPathOfCopyright(const shared_ptr< const BinaryVersion >& versio
 	return string("/usr/share/doc/") + version->packageName + "/copyright";
 }
 
-string Cache::getPathOfChangelog(const shared_ptr< const BinaryVersion >& version)
+string Cache::getPathOfChangelog(const BinaryVersion* version)
 {
 	if (!version->isInstalled())
 	{
