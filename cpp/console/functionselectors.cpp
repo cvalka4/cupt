@@ -835,6 +835,8 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	else
 	{
 		CONSTRUCT_FS("version:uploaders", UploadersFS(arguments))
+		// relations // TODO
+		CONSTRUCT_FS("build-depends", BuildDependencyFS(SRT::BuildDepends, arguments))
 	}
 
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
