@@ -891,7 +891,7 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 {
 	static size_t anonymousVariableId = 0;
 
-	if (*functionNamePtr == "package-with-dependencies")
+	if (*functionNamePtr == "package-with-installed-dependencies")
 	{
 		__require_n_arguments(*argumentsPtr, 1);
 		*functionNamePtr = "recursive";
