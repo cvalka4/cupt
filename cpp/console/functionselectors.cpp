@@ -38,6 +38,31 @@ typedef FunctionSelector FS;
 typedef const Version* SPCV; // former shared_ptr< const Version >
 typedef list< SPCV > FSResult;
 typedef BinaryVersion::RelationTypes BRT;
+typedef SourceVersion::RelationTypes SRT;
+
+const RelationLine& getRelationLine(const Version* v, BRT::Type relationType)
+{
+	return static_cast< const BinaryVersion* >(v)->relations[relationType];
+}
+RelationLine getRelationLine(const Version* v, SRT::Type relationType)
+{
+	return static_cast< const SourceVersion* >(v)->relations[relationType].toRelationLine("");
+}
+
+template < typename RelationType >
+struct IsBinary
+{};
+template <>
+struct IsBinary< BRT::Type >
+{
+	static const bool value = true;
+};
+template <>
+struct IsBinary< SRT::Type >
+{
+	static const bool value = false;
+};
+
 
 bool __spcv_less(const Cache& cache, const SPCV& left, const SPCV& right)
 {
@@ -136,7 +161,9 @@ class VersionSetGetter
 
 class VersionSet
 {
-	const VersionSetGetter* __getter;
+	const VersionSetGetter* __binary_getter;
+	const VersionSetGetter* __source_getter;
+	const VersionSetGetter* __current_getter;
 	bool __filtered;
 	FSResult __versions;
 	std::map< string, FSResult > __variables;
@@ -145,12 +172,16 @@ class VersionSet
 		: __filtered(true), __versions(std::move(versions)), __variables(from.__variables)
 	{}
  public:
-	explicit VersionSet(const VersionSetGetter* getter)
-		: __getter(getter), __filtered(false)
+	explicit VersionSet(const VersionSetGetter* binaryGetter, const VersionSetGetter* sourceGetter)
+		: __binary_getter(binaryGetter), __source_getter(sourceGetter), __filtered(false)
 	{}
 	VersionSet generate(FSResult&& versions) const
 	{
 		return VersionSet(*this, std::move(versions));
+	}
+	void selectGetterType(bool binary)
+	{
+		__current_getter = binary ? __binary_getter : __source_getter;
 	}
 	const FSResult& get() const
 	{
@@ -160,7 +191,7 @@ class VersionSet
 		}
 		else
 		{
-			return __getter->getAll();
+			return __current_getter->getAll();
 		}
 	}
 	FSResult get(const sregex& regex) const
@@ -177,7 +208,7 @@ class VersionSet
 		}
 		else
 		{
-			return __getter->get(regex);
+			return __current_getter->get(regex);
 		}
 	}
 	void setVariable(const string& name, FSResult&& versions)
@@ -195,7 +226,7 @@ class VersionSet
 	}
 	VersionSet getUnfiltered() const
 	{
-		VersionSet result(__getter);
+		VersionSet result(__binary_getter, __source_getter);
 		result.__variables = this->__variables;
 		return result;
 	}
@@ -605,10 +636,12 @@ class OtherFieldRegexMatchFS: public RegexMatchFS
 class TransformFS: public CommonFS
 {
 	unique_ptr< CommonFS > __leaf;
+	bool __binary;
  protected:
 	virtual FSResult _transform(const Cache& cache, const SPCV& version) const = 0;
  public:
 	TransformFS(bool binary, const Arguments& arguments)
+		: __binary(binary)
 	{
 		__require_n_arguments(arguments, 1);
 		__leaf = internalParseFunctionQuery(arguments[0], binary);
@@ -616,7 +649,9 @@ class TransformFS: public CommonFS
 	FSResult select(const Cache& cache, const VersionSet& from) const
 	{
 		FSResult allTransformed;
-		for (const auto& version: __leaf->select(cache, from.getUnfiltered()))
+		auto newVersionSet = from.getUnfiltered();
+		newVersionSet.selectGetterType(__binary);
+		for (const auto& version: __leaf->select(cache, newVersionSet))
 		{
 			auto transformedList = _transform(cache, version);
 			__merge_fsresults(cache, allTransformed, std::move(transformedList));
@@ -661,12 +696,13 @@ class RecursiveFS: public CommonFS
 	}
 };
 
+template < typename RelationType >
 class DependencyFS: public TransformFS
 {
-	const BRT::Type __relation_type;
+	const RelationType __relation_type;
  public:
-	DependencyFS(BRT::Type relationType, const Arguments& arguments)
-		: TransformFS(true, arguments), __relation_type(relationType)
+	DependencyFS(RelationType relationType, const Arguments& arguments)
+		: TransformFS(IsBinary<RelationType>::value, arguments), __relation_type(relationType)
 	{}
  protected:
 	FSResult _transform(const Cache& cache, const SPCV& version) const
@@ -674,8 +710,7 @@ class DependencyFS: public TransformFS
 		SpcvGreater spcvGreater(cache);
 		FSResult result;
 
-		auto binaryVersion = static_cast< const BinaryVersion* >(version);
-		for (const auto& relationExpression: binaryVersion->relations[__relation_type])
+		for (const auto& relationExpression: getRelationLine(version, __relation_type))
 		{
 			auto satisfyingVersions = cache.getSatisfyingVersions(relationExpression);
 			std::sort(satisfyingVersions.begin(), satisfyingVersions.end(), spcvGreater);
@@ -813,14 +848,14 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		// relations
-		CONSTRUCT_FS("pre-depends", DependencyFS(BRT::PreDepends, arguments))
-		CONSTRUCT_FS("depends", DependencyFS(BRT::Depends, arguments))
-		CONSTRUCT_FS("recommends", DependencyFS(BRT::Recommends, arguments))
-		CONSTRUCT_FS("suggests", DependencyFS(BRT::Suggests, arguments))
-		CONSTRUCT_FS("conflicts", DependencyFS(BRT::Conflicts, arguments))
-		CONSTRUCT_FS("breaks", DependencyFS(BRT::Breaks, arguments))
-		CONSTRUCT_FS("replaces", DependencyFS(BRT::Replaces, arguments))
-		CONSTRUCT_FS("enhances", DependencyFS(BRT::Enhances, arguments))
+		CONSTRUCT_FS("pre-depends", DependencyFS<BRT::Type>(BRT::PreDepends, arguments))
+		CONSTRUCT_FS("depends", DependencyFS<BRT::Type>(BRT::Depends, arguments))
+		CONSTRUCT_FS("recommends", DependencyFS<BRT::Type>(BRT::Recommends, arguments))
+		CONSTRUCT_FS("suggests", DependencyFS<BRT::Type>(BRT::Suggests, arguments))
+		CONSTRUCT_FS("conflicts", DependencyFS<BRT::Type>(BRT::Conflicts, arguments))
+		CONSTRUCT_FS("breaks", DependencyFS<BRT::Type>(BRT::Breaks, arguments))
+		CONSTRUCT_FS("replaces", DependencyFS<BRT::Type>(BRT::Replaces, arguments))
+		CONSTRUCT_FS("enhances", DependencyFS<BRT::Type>(BRT::Enhances, arguments))
 		CONSTRUCT_FS("reverse-pre-depends", ReverseDependencyFS(BRT::PreDepends, arguments))
 		CONSTRUCT_FS("reverse-depends", ReverseDependencyFS(BRT::Depends, arguments))
 		CONSTRUCT_FS("reverse-recommends", ReverseDependencyFS(BRT::Recommends, arguments))
@@ -831,12 +866,13 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("reverse-replaces", ReverseDependencyFS(BRT::Replaces, arguments))
 
 		CONSTRUCT_FS("version:provides", ProvidesFS(arguments))
+
+		CONSTRUCT_FS("build-depends", DependencyFS<SRT::Type>(SRT::BuildDepends, arguments))
 	}
 	else
 	{
 		CONSTRUCT_FS("version:uploaders", UploadersFS(arguments))
 		// relations // TODO
-		CONSTRUCT_FS("build-depends", BuildDependencyFS(SRT::BuildDepends, arguments))
 	}
 
 	fatal2(__("unknown %s selector function '%s'"), binary ? __("binary") : __("source"), functionName);
@@ -1060,8 +1096,11 @@ list< SPCV > selectAllVersions(const Cache& cache, const FS& functionSelector)
 		fatal2i("selectVersion: functionSelector is not an ancestor of CommonFS");
 	}
 	bool binary = (dynamic_cast< const BinaryTagDummyFS* >(commonFS));
-	VersionSetGetter versionSetGetter(cache, binary);
-	return commonFS->select(cache, VersionSet(&versionSetGetter));
+	VersionSetGetter binaryGetter(cache, true);
+	VersionSetGetter sourceGetter(cache, false);
+	VersionSet versionSet(&binaryGetter, &sourceGetter);
+	versionSet.selectGetterType(binary);
+	return commonFS->select(cache, versionSet);
 }
 
 list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector)

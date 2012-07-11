@@ -278,7 +278,7 @@ static vector< string > getBinaryPackageNames(const Cache& cache)
 	return cache.getBinaryPackageNames();
 }
 
-static bool isFunctionExpression(const string& expression)
+bool isFunctionExpression(const string& expression)
 {
 	return (expression.find_first_of("()") != string::npos);
 }

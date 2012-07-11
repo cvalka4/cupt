@@ -65,7 +65,10 @@ int showBinaryVersions(Context& context)
 	{
 		Version::parseOthers = true;
 	}
-	auto cache = context.getCache(/* source */ false, /* binary */ variables.count("installed-only") == 0,
+
+	auto cache = context.getCache(
+			/* source */ any_of(arguments.begin(), arguments.end(), &isFunctionExpression),
+			/* binary */ variables.count("installed-only") == 0,
 			/* installed */ true);
 
 	auto getReverseProvides = [&cache](const string& packageName) -> RelationLine
