@@ -784,16 +784,6 @@ class PackageIsAutoInstalledFS: public PredicateFS
 
 namespace attr
 {
-	string description(const Cache& cache, const SPCV& version)
-	{
-		auto v = static_cast< const BinaryVersion* >(version);
-		// TODO/API break/: make it return one, localized if possible, always non-empty string
-		auto descriptions = cache.getLocalizedDescriptions(v);
-		const string& shortDescription = descriptions.first.empty() ? v->shortDescription : descriptions.first;
-		const string& longDescription = descriptions.second.empty() ? v->longDescription : descriptions.second;
-
-		return shortDescription + longDescription;
-	}
 	string priority(const Cache&, const SPCV& version)
 	{
 		return Version::Priorities::strings[version->priority];
@@ -844,7 +834,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("version:source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
 		CONSTRUCT_FS("version:essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
 		CONSTRUCT_FS("version:installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
-		CONSTRUCT_FS("version:description", RegexMatchFS(attr::description, arguments))
+		CONSTRUCT_FS("version:description", RegexMatchFS(BINARY_VERSION_MEMBER(description), arguments))
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		// relations
