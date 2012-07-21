@@ -953,7 +953,7 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 		*functionNamePtr = "recursive";
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
-				"best(and( or(Ypd(%s),Yd(%s),Yr(%s)) , package:installed ))",
+				"best( or(Ypd(%s),Yd(%s),Yr(%s)) & Pi )",
 				variableName, variableName, variableName);
 		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
 	}
