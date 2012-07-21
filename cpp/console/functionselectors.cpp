@@ -870,7 +870,7 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	__builtin_unreachable();
 }
 
-vector< string > split(const string& input)
+vector< string > split(const string& input, const char delimiter = ',')
 {
 	if (input.empty())
 	{
@@ -880,17 +880,19 @@ vector< string > split(const string& input)
 	size_t argumentStartPosition = 0;
 	size_t position = 0;
 	size_t level = 0;
-	while (position = input.find_first_of(",()/", position), position != string::npos)
+
+	char delimiters[] = "d()/";
+	delimiters[0] = delimiter;
+
+	while (position = input.find_first_of(delimiters, position), position != string::npos)
 	{
-		switch (input[position])
+		if (input[position] == delimiter && level == 0)
 		{
-			case ',':
-				if (level == 0)
-				{
-					result.push_back(input.substr(argumentStartPosition, position - argumentStartPosition));
-					argumentStartPosition = position+1;
-				}
-				break;
+			result.push_back(input.substr(argumentStartPosition, position - argumentStartPosition));
+			argumentStartPosition = position+1;
+		}
+		else switch (input[position])
+		{
 			case '(':
 				++level;
 				break;
@@ -1014,6 +1016,46 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 	processNonTrivialAliases(functionNamePtr, argumentsPtr);
 }
 
+void parseFunctionNameAndArguments(const string& query,
+		string* functionNamePtr, vector< string >* argumentsPtr)
+{
+	vector< string > possibleArguments;
+	possibleArguments = split(query, '|');
+	if (possibleArguments.size() > 1)
+	{
+		*functionNamePtr = "or";
+		*argumentsPtr = std::move(possibleArguments);
+		return;
+	}
+	possibleArguments = split(query, '&');
+	if (possibleArguments.size() > 1)
+	{
+		*functionNamePtr = "and";
+		*argumentsPtr = std::move(possibleArguments);
+		return;
+	}
+
+	auto argumentsPosition = query.find_first_of("()");
+	if (argumentsPosition == string::npos)
+	{
+		*functionNamePtr = query; // assume that the function takes no parameters
+	}
+	else
+	{
+		if (query[argumentsPosition] == ')')
+		{
+			fatal2(__("closing bracket ')' doesn't have a corresponding opening bracket '('"));
+		}
+		// now we know it's surely '('
+		if (query.back() != ')')
+		{
+			fatal2(__("the last query character is not a closing bracket ')'"));
+		}
+		*functionNamePtr = query.substr(0, argumentsPosition);
+		*argumentsPtr = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
+	}
+}
+
 unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool binary)
 {
 	try
@@ -1025,26 +1067,7 @@ unique_ptr< CommonFS > internalParseFunctionQuery(const string& query, bool bina
 
 		string functionName;
 		vector< string > arguments;
-
-		auto argumentsPosition = query.find_first_of("()");
-		if (argumentsPosition == string::npos)
-		{
-			functionName = query; // assume that the function takes no parameters
-		}
-		else
-		{
-			if (query[argumentsPosition] == ')')
-			{
-				fatal2(__("closing bracket ')' doesn't have a corresponding opening bracket '('"));
-			}
-			// now we know it's surely '('
-			if (query.back() != ')')
-			{
-				fatal2(__("the last query character is not a closing bracket ')'"));
-			}
-			functionName = query.substr(0, argumentsPosition);
-			arguments = split(query.substr(argumentsPosition + 1, query.size() - argumentsPosition - 2));
-		}
+		parseFunctionNameAndArguments(query, &functionName, &arguments);
 
 		for (string& argument: arguments)
 		{
