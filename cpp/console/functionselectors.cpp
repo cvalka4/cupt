@@ -228,6 +228,7 @@ class VersionSet
 	{
 		VersionSet result(__binary_getter, __source_getter);
 		result.__variables = this->__variables;
+		result.__current_getter = this->__current_getter;
 		return result;
 	}
 	bool isFiltered() const
@@ -952,7 +953,7 @@ void processNonTrivialAliases(string* functionNamePtr, vector< string >* argumen
 		*functionNamePtr = "recursive";
 		auto variableName = format2("__anon%zu", anonymousVariableId++);
 		auto recursiveExpression = format2(
-				"best(and( or(y:pd(%s),y:d(%s),y:r(%s)) , package:installed ))",
+				"best(and( or(Ypd(%s),Yd(%s),Yr(%s)) , package:installed ))",
 				variableName, variableName, variableName);
 		*argumentsPtr = { variableName, argumentsPtr->front(), recursiveExpression };
 	}
@@ -962,48 +963,48 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 {
 	{ // simple aliases
 		static map< string, string > aliases = {
-			{ "p:n", "package:name" },
-			{ "p:i", "package:installed" },
-			{ "p:ai", "package:automatically-installed" },
+			{ "Pn", "package:name" },
+			{ "Pi", "package:installed" },
+			{ "Pai", "package:automatically-installed" },
 
-			{ "v:v", "version:version" },
-			{ "v:m", "version:maintainer" },
-			{ "v:p", "version:priority" },
-			{ "v:s", "version:section" },
-			{ "v:t", "version:trusted" },
-			{ "v:f", "version:field" },
-			{ "v:sp", "version:source-package" },
-			{ "v:sv", "version:source-version" },
-			{ "v:e", "version:essential" },
-			{ "v:i", "version:installed" },
-			{ "v:d", "version:description" },
-			{ "v:p", "version:provides" },
-			{ "v:u", "version:uploaders" },
+			{ "v", "version:version" },
+			{ "m", "version:maintainer" },
+			{ "p", "version:priority" },
+			{ "s", "version:section" },
+			{ "t", "version:trusted" },
+			{ "f", "version:field" },
+			{ "sp", "version:source-package" },
+			{ "sv", "version:source-version" },
+			{ "e", "version:essential" },
+			{ "i", "version:installed" },
+			{ "d", "version:description" },
+			{ "o", "version:provides" },
+			{ "u", "version:uploaders" },
 
-			{ "y:pd", "pre-depends" },
-			{ "y:d", "depends" },
-			{ "y:r", "recommends" },
-			{ "y:s", "suggests" },
-			{ "y:e", "enhances" },
-			{ "y:c", "conflicts" },
-			{ "y:b", "breaks" },
-			{ "y:rp", "replaces" },
+			{ "Ypd", "pre-depends" },
+			{ "Yd", "depends" },
+			{ "Yr", "recommends" },
+			{ "Ys", "suggests" },
+			{ "Ye", "enhances" },
+			{ "Yc", "conflicts" },
+			{ "Yb", "breaks" },
+			{ "Yrp", "replaces" },
 
-			{ "y:r-pd", "reverse-pre-depends" },
-			{ "y:r-d", "reverse-depends" },
-			{ "y:r-r", "reverse-recommends" },
-			{ "y:r-s", "reverse-suggests" },
-			{ "y:r-e", "reverse-enhances" },
-			{ "y:r-c", "reverse-conflicts" },
-			{ "y:r-b", "reverse-breaks" },
-			{ "y:r-rp", "reverse-replaces" },
+			{ "YRpd", "reverse-pre-depends" },
+			{ "YRd", "reverse-depends" },
+			{ "YRr", "reverse-recommends" },
+			{ "YRs", "reverse-suggests" },
+			{ "YRe", "reverse-enhances" },
+			{ "YRc", "reverse-conflicts" },
+			{ "YRb", "reverse-breaks" },
+			{ "YRrp", "reverse-replaces" },
 
-			{ "r:a", "release:archive" },
-			{ "r:n", "release:codename" },
-			{ "r:c", "release:component" },
-			{ "r:v", "release:version" },
-			{ "r:o", "release:vendor" },
-			{ "r:u", "release:origin" },
+			{ "Ra", "release:archive" },
+			{ "Rn", "release:codename" },
+			{ "Rc", "release:component" },
+			{ "Rv", "release:version" },
+			{ "Ro", "release:vendor" },
+			{ "Ru", "release:origin" },
 		};
 		auto it = aliases.find(*functionNamePtr);
 		if (it != aliases.end())
@@ -1123,4 +1124,3 @@ list< SPCV > selectBestVersions(const Cache& cache, const FS& functionSelector)
 	result.unique([](const SPCV& left, const SPCV& right) { return left->packageName == right->packageName; });
 	return result;
 }
-
