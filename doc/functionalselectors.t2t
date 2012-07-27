@@ -8,6 +8,7 @@ Eugene V. Lyubimkin
 %!options(html): --toc
 %!postproc(html): <HEAD> '<HEAD>\n<STYLE>body{margin:2em;}</STYLE>'
 %!postproc: '^the_end_of_the_config_area' ''
+%!preproc: '%regex_syntax\((.*?)\)%' "``\1(``//regex//``)``"
 
 the_end_of_the_config_area
 
@@ -114,9 +115,59 @@ Apply to source and binary versions.
 
 === version ===
 
-``version(``//regex//``)``
+%regex_syntax(version)%
 
 Receives one string argument. Returns versions which version string matches the
 regular expression //regex//.
 
 Short alias: ``v``.
+
+=== maintainer ===
+
+%regex_syntax(maintainer)%
+
+Receives one string argument. Returns versions which maintainer matches the
+regular expression //regex//.
+
+Short alias: ``m``.
+
+=== priority ===
+
+%regex_syntax(priority)%
+
+Receives one string argument. Returns versions which priority matches the
+regular expression //regex//.
+
+Short alias: ``p``.
+
+=== section ===
+
+%regex_syntax(section)%
+
+Receives one string argument. Returns versions which section matches the
+regular expression //regex//.
+
+Short alias: ``s``.
+
+=== trusted ===
+
+``trusted()``
+
+Receives no arguments. Returns versions which have at least one release (which
+it comes from) with a valid cryptographic signature.
+
+Short alias: ``t``.
+
+=== field ===
+
+``field(``//field_name//, //regex//``)``
+
+Receives two string arguments. Returns versions where the value of the
+non-standard (not recognized by Cupt) field //field_name// matches the regular
+expression //regex//.
+
+If the version does not contain a field //field_name//, its value is assumed
+being empty string; and it can still match if regular expression matches empty
+string.
+
+Short alias: ``f``.
