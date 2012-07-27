@@ -74,7 +74,49 @@ Receives one FSE-argument. Returns versions which don't satisfy //fse//.
 
 === xor ===
 
-``xor(``//fse1//``, //fse2//``)``
+``xor(``//fse1//, //fse2//``)``
 
 Receives two FSE-arguments. Returns versions which satisfy either //fse1// or
 //fse2// but not both.
+
+== Package property functions ==
+
+=== package:name ===
+
+``package:name(``//regex//``)``
+
+Receives one string argument. Returns versions which package name matches the
+regular expression //regex//.
+
+Short alias: ``Pn``.
+
+=== package:installed ===
+
+``package:installed()``
+
+Receives no arguments. Applies only to binary versions. Returns versions which
+belong to to installed packages.
+
+Short alias: ``Pi``.
+
+=== package:automatically-installed ===
+
+``package:automatically-installed()``
+
+Receives no arguments. Applies only to binary versions. Returns versions which
+belong to automatically installed packages.
+
+Short alias: ``Pai``.
+
+== Common version property functions ==
+
+Apply to source and binary versions.
+
+=== version ===
+
+``version(``//regex//``)``
+
+Receives one string argument. Returns versions which version string matches the
+regular expression //regex//.
+
+Short alias: ``v``.
