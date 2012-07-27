@@ -817,12 +817,12 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_FS("best", BestFS(binary, arguments))
 	// common
 	CONSTRUCT_FS("package:name", PackageNameFS(arguments))
-	CONSTRUCT_FS("version:version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
-	CONSTRUCT_FS("version:maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
-	CONSTRUCT_FS("version:priority", RegexMatchFS(attr::priority, arguments))
-	CONSTRUCT_FS("version:section", RegexMatchFS(VERSION_MEMBER(section), arguments))
-	CONSTRUCT_FS("version:trusted", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
-	CONSTRUCT_FS("version:field", OtherFieldRegexMatchFS(arguments))
+	CONSTRUCT_FS("version", RegexMatchFS(VERSION_MEMBER(versionString), arguments))
+	CONSTRUCT_FS("maintainer", RegexMatchFS(VERSION_MEMBER(maintainer), arguments))
+	CONSTRUCT_FS("priority", RegexMatchFS(attr::priority, arguments))
+	CONSTRUCT_FS("section", RegexMatchFS(VERSION_MEMBER(section), arguments))
+	CONSTRUCT_FS("trusted", BoolMatchFS(VERSION_MEMBER(isVerified()), arguments))
+	CONSTRUCT_FS("field", OtherFieldRegexMatchFS(arguments))
 	CONSTRUCT_RELEASE_MEMBER_FS("release:archive", archive)
 	CONSTRUCT_RELEASE_MEMBER_FS("release:codename", codename)
 	CONSTRUCT_RELEASE_MEMBER_FS("release:component", component)
@@ -831,11 +831,11 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 	CONSTRUCT_RELEASE_MEMBER_FS("release:origin", baseUri)
 	if (binary)
 	{
-		CONSTRUCT_FS("version:source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
-		CONSTRUCT_FS("version:source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
-		CONSTRUCT_FS("version:essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
-		CONSTRUCT_FS("version:installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
-		CONSTRUCT_FS("version:description", RegexMatchFS(BINARY_VERSION_MEMBER(description), arguments))
+		CONSTRUCT_FS("source-package", RegexMatchFS(BINARY_VERSION_MEMBER(sourcePackageName), arguments))
+		CONSTRUCT_FS("source-version", RegexMatchFS(BINARY_VERSION_MEMBER(sourceVersionString), arguments))
+		CONSTRUCT_FS("essential", BoolMatchFS(BINARY_VERSION_MEMBER(essential), arguments))
+		CONSTRUCT_FS("installed", BoolMatchFS(BINARY_VERSION_MEMBER(isInstalled()), arguments))
+		CONSTRUCT_FS("description", RegexMatchFS(BINARY_VERSION_MEMBER(description), arguments))
 		CONSTRUCT_FS("package:installed", PackageIsInstalledFS(arguments))
 		CONSTRUCT_FS("package:automatically-installed", PackageIsAutoInstalledFS(arguments))
 		// relations
@@ -856,14 +856,14 @@ CommonFS* constructFSByName(const string& functionName, const CommonFS::Argument
 		CONSTRUCT_FS("reverse-enhances", ReverseDependencyFS(BRT::Enhances, arguments))
 		CONSTRUCT_FS("reverse-replaces", ReverseDependencyFS(BRT::Replaces, arguments))
 
-		CONSTRUCT_FS("version:provides", ProvidesFS(arguments))
+		CONSTRUCT_FS("provides", ProvidesFS(arguments))
 
 		CONSTRUCT_FS("build-depends", DependencyFS<SRT::Type>(SRT::BuildDepends, arguments))
 		CONSTRUCT_FS("build-depends-indep", DependencyFS<SRT::Type>(SRT::BuildDependsIndep, arguments))
 	}
 	else
 	{
-		CONSTRUCT_FS("version:uploaders", UploadersFS(arguments))
+		CONSTRUCT_FS("uploaders", UploadersFS(arguments))
 		// relations // TODO
 	}
 
@@ -967,19 +967,19 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "Pi", "package:installed" },
 			{ "Pai", "package:automatically-installed" },
 
-			{ "v", "version:version" },
-			{ "m", "version:maintainer" },
-			{ "p", "version:priority" },
-			{ "s", "version:section" },
-			{ "t", "version:trusted" },
-			{ "f", "version:field" },
-			{ "sp", "version:source-package" },
-			{ "sv", "version:source-version" },
-			{ "e", "version:essential" },
-			{ "i", "version:installed" },
-			{ "d", "version:description" },
-			{ "o", "version:provides" },
-			{ "u", "version:uploaders" },
+			{ "v", "version" },
+			{ "m", "maintainer" },
+			{ "p", "priority" },
+			{ "s", "section" },
+			{ "t", "trusted" },
+			{ "f", "field" },
+			{ "sp", "source-package" },
+			{ "sv", "source-version" },
+			{ "e", "essential" },
+			{ "i", "installed" },
+			{ "d", "description" },
+			{ "o", "provides" },
+			{ "u", "uploaders" },
 
 			{ "Ypd", "pre-depends" },
 			{ "Yd", "depends" },
