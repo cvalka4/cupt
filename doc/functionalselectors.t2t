@@ -53,32 +53,13 @@ is a special short form for '``or(``//argument1//, //argument2//, ...
 
 == Logic functions ==
 
-=== and ===
+Receive FSEs as arguments.
 
-``and(``//fse1//, //fse2//, ... //fseN//``)``
-
-Receives one or more FSE-arguments. Returns versions which satisfy all of the
-//fse1//..//fseN//.
-
-=== or ===
-
-``or(``//fse1//, //fse2//, ... //fseN//``)``
-
-Receives one or more FSE-arguments. Returns versions which satisfy any of the
-//fse1//..//fseN//.
-
-=== not ===
-
-``not(``//fse//``)``
-
-Receives one FSE-argument. Returns versions which don't satisfy //fse//.
-
-=== xor ===
-
-``xor(``//fse1//, //fse2//``)``
-
-Receives two FSE-arguments. Returns versions which satisfy either //fse1// or
-//fse2// but not both.
+|| Function name and arguments | Argument count | Returns versions which... |
+| ``and(``//fse1//, //fse2//, ... //fseN//``)`` | ≥ 1 | satisfy all of the //fse1//..//fseN// |
+| ``or(``//fse1//, //fse2//, ... //fseN//``)`` | ≥ 1 | satisfy any of the //fse1//..//fseN// |
+| ``not(``//fse//``)`` | 1 | don't satisfy //fse// |
+| ``xor(``//fse1//, //fse2//``)`` | 2 | satisfy either //fse1// or //fse2// but not both |
 
 == Package property functions ==
 
