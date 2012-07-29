@@ -153,8 +153,8 @@ Short alias: ``s``.
 
 ``trusted()``
 
-Receives no arguments. Returns versions which have at least one release (which
-it comes from) with a valid cryptographic signature.
+Receives no arguments. Returns versions which come from at least one release
+with a valid cryptographic signature.
 
 Short alias: ``t``.
 
@@ -171,3 +171,17 @@ being empty string; and it can still match if regular expression matches empty
 string.
 
 Short alias: ``f``.
+
+=== release-related functions ===
+
+Functions from this family receive one string argument (//regex//) and return
+versions which come from at least one release where //property// (see the
+following table) matches the regular expression //regex//.
+
+|| Function name | Short alias | //Property// |
+| release:archive | Ra | archive |
+| release:codename | Rn | codename |
+| release:component | Rc | component |
+| release:version | Rv | version |
+| release:vendor | Ro | vendor |
+| release:origin | Ru | origin (base URI) |
