@@ -82,32 +82,10 @@ Receives two FSE-arguments. Returns versions which satisfy either //fse1// or
 
 == Package property functions ==
 
-=== package:name ===
-
-``package:name(``//regex//``)``
-
-Receives one string argument. Returns versions which package name matches the
-regular expression //regex//.
-
-Short alias: ``Pn``.
-
-=== package:installed ===
-
-``package:installed()``
-
-Receives no arguments. Applies only to binary versions. Returns versions which
-belong to to installed packages.
-
-Short alias: ``Pi``.
-
-=== package:automatically-installed ===
-
-``package:automatically-installed()``
-
-Receives no arguments. Applies only to binary versions. Returns versions which
-belong to automatically installed packages.
-
-Short alias: ``Pai``.
+|| Function name and arguments | Short alias | Returns versions which... | Notes |
+| ``package:name(``//regex//``)`` | ``Pn`` | package name matches //regex// |
+| ``package:installed()`` | ``Pi`` | belong to to installed packages | applies only to binary versions |
+| ``package:automatically-installed()`` | ``Pai`` | belong to automatically installed packages | applies only to binary versions |
 
 == Common version property functions ==
 
