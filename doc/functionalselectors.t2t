@@ -89,9 +89,18 @@ versions which come from at least one release where //property// (see the
 following table) matches the regular expression //regex//.
 
 || Function name | Short alias | //Property// |
-| release:archive | Ra | archive |
-| release:codename | Rn | codename |
-| release:component | Rc | component |
-| release:version | Rv | version |
-| release:vendor | Ro | vendor |
-| release:origin | Ru | origin (base URI) |
+| ``release:archive`` | ``Ra`` | archive |
+| ``release:codename`` | ``Rn`` | codename |
+| ``release:component`` | ``Rc`` | component |
+| ``release:version`` | ``Rv`` | version |
+| ``release:vendor`` | ``Ro`` | vendor |
+| ``release:origin`` | ``Ru`` | origin (base URI) |
+
+== Binary version property functions ==
+
+Apply only to binary versions.
+
+|| Function name | Short alias | Returns versions which... |
+| %regex_syntax(source-package)% | ``sp`` | source package matches //regex// |
+| %regex_syntax(source-version)% | ``sv`` | source version string matches //regex// |
+
