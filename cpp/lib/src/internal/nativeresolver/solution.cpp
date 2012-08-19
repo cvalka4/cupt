@@ -27,8 +27,8 @@ namespace internal {
 
 using std::make_pair;
 
-PackageEntry::PackageEntry()
-	: sticked(false), autoremoved(false)
+PackageEntry::PackageEntry(bool sticked_)
+	: sticked(sticked_), autoremoved(false)
 {}
 
 bool PackageEntry::isModificationAllowed(const dg::Element* elementPtr) const
@@ -303,6 +303,7 @@ void SolutionStorage::__update_broken_successors(Solution& solution,
 	for (auto predecessorElementPtr: predecessorsOfOld)
 	{
 		if (isPresent(predecessorsOfNew, predecessorElementPtr)) continue;
+		if (isPresent(successorsOfNew, predecessorElementPtr)) continue;
 
 		if (reverseDependencyExists(predecessorElementPtr))
 		{
