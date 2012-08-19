@@ -110,7 +110,24 @@ Apply only to binary versions.
 
 == Source version property functions ==
 
-Apply to source versions.
+Apply only to source versions.
 
 || Function name and arguments | Short alias | Returns versions which... |
 | %regex_syntax(uploaders)% | ``u`` | have at least one uploader which matches //regex// |
+
+== Binary relation functions ==
+
+Apply only to binary versions.
+
+Functions from this family receive one FSE-argument (//fse//) and return all versions
+which satisfy the dependency of type //relation type// for //fse// (see the following table).
+
+|| Function name | Short alias | //Relation type// |
+| pre-depends | ``Ypd`` | Pre-Depends |
+| depends | ``Yd`` | Depends |
+| recommends | ``Yr`` | Recommends |
+| suggests | ``Ys`` | Suggests |
+| enhances | ``Ye`` | Enhances |
+| conflicts | ``Yc`` | Conflicts |
+| break | ``Yb`` | Breaks |
+| replaces | ``Yrp`` | Replaces |
