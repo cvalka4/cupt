@@ -119,6 +119,8 @@ Apply only to source versions.
 
 Apply only to binary versions.
 
+=== forward dependencies ===
+
 Functions from this family receive one FSE-argument (//fse//) and return all versions
 which satisfy the dependency of type //relation type// for //fse// (see the following table).
 
@@ -129,8 +131,24 @@ which satisfy the dependency of type //relation type// for //fse// (see the foll
 | ``suggests`` | ``Ys`` | Suggests |
 | ``enhances`` | ``Ye`` | Enhances |
 | ``conflicts`` | ``Yc`` | Conflicts |
-| ``break`` | ``Yb`` | Breaks |
+| ``breaks`` | ``Yb`` | Breaks |
 | ``replaces`` | ``Yrp`` | Replaces |
+
+=== reverse dependencies ===
+
+Functions from this family receive one FSE-argument (//fse//) and return all
+versions for which at least one version from //fse// satisfies the dependency
+of type //relation type// (see the following table).
+
+|| Function name | Short alias | //Relation type// |
+| ``reverse-pre-depends`` | ``YRpd`` | Pre-Depends |
+| ``reverse-depends`` | ``YRd`` | Depends |
+| ``reverse-recommends`` | ``YRr`` | Recommends |
+| ``reverse-suggests`` | ``YRs`` | Suggests |
+| ``reverse-enhances`` | ``YRe`` | Enhances |
+| ``reverse-conflicts`` | ``YRc`` | Conflicts |
+| ``reverse-breaks`` | ``YRb`` | Breaks |
+| ``reverse-replaces`` | ``YRrp`` | Replaces |
 
 == Metafunctions ==
 
