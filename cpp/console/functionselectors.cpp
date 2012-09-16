@@ -1001,6 +1001,11 @@ void processAliases(string* functionNamePtr, vector< string >* argumentsPtr)
 			{ "YRb", "reverse-breaks" },
 			{ "YRrp", "reverse-replaces" },
 
+			{ "Zbd", "build-depends" },
+			{ "Zbdi", "build-depends-indep" },
+			{ "Zbc", "build-conflicts" },
+			{ "Zbci", "build-conflicts-indep" },
+
 			{ "Ra", "release:archive" },
 			{ "Rn", "release:codename" },
 			{ "Rc", "release:component" },

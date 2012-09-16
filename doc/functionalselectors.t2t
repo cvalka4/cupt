@@ -150,6 +150,20 @@ of type //relation type// (see the following table).
 | ``reverse-breaks`` | ``YRb`` | Breaks |
 | ``reverse-replaces`` | ``YRrp`` | Replaces |
 
+== Source relation functions ==
+
+Apply only to source versions and return binary versions.
+
+Functions from this family receive one FSE-argument (//fse//) and return all
+versions which satisfy the build-time dependency of type //relation type// for
+//fse// (see the following table).
+
+|| Function name | Short alias | //Relation type// |
+| ``build-depends`` | ``Zbd`` | Build-Depends |
+| ``build-depends-indep`` | ``Zbdi`` | Build-Depends-Indep |
+| ``build-conflicts`` | ``Zbc`` | Build-Conflicts |
+| ``build-conflicts-indep`` | ``Zbci`` | Build-Conflicts-Indep |
+
 == Metafunctions ==
 
 === defining functions ===
