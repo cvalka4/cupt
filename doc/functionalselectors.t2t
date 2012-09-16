@@ -131,3 +131,21 @@ which satisfy the dependency of type //relation type// for //fse// (see the foll
 | conflicts | ``Yc`` | Conflicts |
 | break | ``Yb`` | Breaks |
 | replaces | ``Yrp`` | Replaces |
+
+== Metafunctions ==
+
+=== Defining functions ===
+
+The function ``with`` allows to define a user function with no parameters
+which can be used as FSE-argument in the subexpression.
+
+Syntax:
+
+``with(``//function_name//,//function_expression//,//subexpression//``)``
+
+|| Argument | Meaning |
+| //function_name// | user-defined function name, must start with an underscore (``_``) |
+| //function_expression// | FSE, function value |
+| //subexpression// | FSE which the defined function can be used in |
+
+This function returns the value of //subexpression//.
