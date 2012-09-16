@@ -123,20 +123,20 @@ Functions from this family receive one FSE-argument (//fse//) and return all ver
 which satisfy the dependency of type //relation type// for //fse// (see the following table).
 
 || Function name | Short alias | //Relation type// |
-| pre-depends | ``Ypd`` | Pre-Depends |
-| depends | ``Yd`` | Depends |
-| recommends | ``Yr`` | Recommends |
-| suggests | ``Ys`` | Suggests |
-| enhances | ``Ye`` | Enhances |
-| conflicts | ``Yc`` | Conflicts |
-| break | ``Yb`` | Breaks |
-| replaces | ``Yrp`` | Replaces |
+| ``pre-depends`` | ``Ypd`` | Pre-Depends |
+| ``depends`` | ``Yd`` | Depends |
+| ``recommends`` | ``Yr`` | Recommends |
+| ``suggests`` | ``Ys`` | Suggests |
+| ``enhances`` | ``Ye`` | Enhances |
+| ``conflicts`` | ``Yc`` | Conflicts |
+| ``break`` | ``Yb`` | Breaks |
+| ``replaces`` | ``Yrp`` | Replaces |
 
 == Metafunctions ==
 
-=== Defining functions ===
+=== defining functions ===
 
-The function ``with`` defines a user function with no parameters
+The function **``with``** defines a user function with no parameters
 which can be used as FSE-argument in the subexpression.
 
 Syntax:
@@ -150,9 +150,9 @@ Syntax:
 
 This function returns the value of //subexpression//.
 
-=== Recursing ===
+=== recursing ===
 
-The function ``recursive`` a recursive transformation FSE.
+The function **``recursive``** defines a recursive transformation FSE.
 
 Syntax:
 
