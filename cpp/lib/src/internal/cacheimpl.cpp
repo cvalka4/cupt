@@ -541,13 +541,15 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 	try
 	{
 		string packageName;
+		const string* persistentPackageNamePtr;
 
 		ioi::Record ioiRecord;
 		ioiRecord.offsetPtr = &prePackageRecord.offset;
 		ioiRecord.packageNamePtr = &packageName;
 
-		ioi::processIndex(path,
-				[this, &packageName, &alias, &prePackagesStorage, &prePackageRecord, &ioiRecord]()
+		ioi::Callbacks callbacks;
+		callbacks.main =
+				[this, &packageName, &alias, &prePackagesStorage, &prePackageRecord, &persistentPackageNamePtr]()
 				{
 					try
 					{
@@ -562,16 +564,16 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 					auto& prePackageRecords = prePackagesStorage[std::move(packageName)];
 					prePackageRecords.push_back(prePackageRecord);
 
-					auto persistentPackageNamePtr = (const string*)
+					persistentPackageNamePtr = (const string*)
 							((const char*)(&prePackageRecords) - offsetof(PrePackageMap::value_type, second));
+				};
+		callbacks.provides =
+				[this, &persistentPackageNamePtr](const char* begin, const char* end)
+				{
+					processProvides(persistentPackageNamePtr, begin, end);
+				};
 
-					if (ioiRecord.providesBegin)
-					{
-						processProvides(persistentPackageNamePtr,
-								ioiRecord.providesBegin, ioiRecord.providesEnd);
-					}
-				},
-				&ioiRecord);
+		ioi::processIndex(path, callbacks, &ioiRecord);
 	}
 	catch (Exception&)
 	{

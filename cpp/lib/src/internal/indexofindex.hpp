@@ -29,9 +29,13 @@ struct Record
 };
 // index suffix number must be incremented every time Record changes
 
-typedef std::function< void () > Callback;
+struct Callbacks
+{
+	std::function< void () > main;
+	std::function< void (const char*, const char*) > provides;
+};
 
-void processIndex(const string& path, const Callback&, Record*);
+void processIndex(const string& path, const Callbacks&, Record*);
 
 }
 }

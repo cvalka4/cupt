@@ -42,7 +42,7 @@ time_t getModifyTime(const string& path)
 	return st.st_mtime;
 }
 
-void parseFullIndex(const string& path, const Callback& callback, Record* record)
+void parseFullIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
 	string openError;
 	File file(path, "r", openError);
@@ -79,18 +79,16 @@ void parseFullIndex(const string& path, const Callback& callback, Record* record
 		{
 			fatal2(__("unable to find a Package line"));
 		}
+		callbacks.main();
 
-		record->providesBegin = nullptr;
 		while (getNextLine(), size > 1)
 		{
 			static const size_t providesAnchorLength = sizeof("Provides: ") - 1;
 			if (*buf == 'P' && size > providesAnchorLength && !memcmp("rovides: ", buf+1, providesAnchorLength-1))
 			{
-				record->providesBegin = buf + providesAnchorLength;
-				record->providesEnd = buf + size - 1;
+				callbacks.provides(buf + providesAnchorLength, buf + size - 1);
 			}
 		}
-		callback();
 	}
 }
 
@@ -100,7 +98,7 @@ const char provides = 'p';
 
 }
 
-void parseIndexOfIndex(const string& path, const Callback& callback, Record* record)
+void parseIndexOfIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
 	string openError;
 	File file(path, "r", openError);
@@ -120,7 +118,7 @@ void parseIndexOfIndex(const string& path, const Callback& callback, Record* rec
 			}
 			(*record->offsetPtr) = ntohl(*reinterpret_cast< const uint32_t* >(buf));
 			record->packageNamePtr->assign(buf+sizeof(uint32_t), buf+bufSize-1);
-			break;
+			callbacks.main();
 		}
 		while (file.rawGetLine(buf, bufSize), bufSize > 1)
 		{
@@ -128,32 +126,30 @@ void parseIndexOfIndex(const string& path, const Callback& callback, Record* rec
 			switch (fieldType)
 			{
 				case field::provides:
-					record->providesBegin = buf+1;
-					record->providesEnd = buf+bufSize-1;
+					callbacks.provides(buf+1, buf+bufSize-1);
 					break;
 				default:
 					fatal2i("ioi: invalid field type %zu", size_t(fieldType));
 			}
 		}
-		callback();
 	}
 }
 
 }
 
 
-void processIndex(const string& path, const Callback& callback, Record* record)
+void processIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
 	static const string currentIndexSuffix = ".index0";
 
 	auto ioiPath = path + currentIndexSuffix;
 	if (fs::fileExists(ioiPath) && (getModifyTime(ioiPath) >= getModifyTime(path)))
 	{
-		parseIndexOfIndex(ioiPath, callback, record);
+		parseIndexOfIndex(ioiPath, callbacks, record);
 	}
 	else
 	{
-		parseFullIndex(path, callback, record);
+		parseFullIndex(path, callbacks, record);
 	}
 }
 
