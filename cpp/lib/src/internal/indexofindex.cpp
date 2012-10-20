@@ -98,6 +98,11 @@ const char provides = 'p';
 
 }
 
+uint32_t ourHex2Uint(const char* s)
+{
+	return strtol(s, nullptr, 16);
+}
+
 void parseIndexOfIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
 	string openError;
@@ -107,17 +112,27 @@ void parseIndexOfIndex(const string& path, const Callbacks& callbacks, Record* r
 		fatal2(__("unable to open the file '%s': %s"), path, openError);
 	}
 
+	uint32_t absoluteOffset = 0;
+
 	const char* buf;
 	size_t bufSize;
 	while (file.rawGetLine(buf, bufSize), bufSize > 0)
 	{
 		{ // offset and package name:
-			if (bufSize < 6)
+			if (bufSize-1 < 3)
 			{
 				fatal2i("ioi: offset and package name: too small line");
 			}
-			(*record->offsetPtr) = ntohl(*reinterpret_cast< const uint32_t* >(buf));
-			record->packageNamePtr->assign(buf+sizeof(uint32_t), buf+bufSize-1);
+			// finding delimiter (format: "<hex>\0<packagename>\n)
+			auto delimiterPosition = memchr(buf+1, '\0', bufSize-3);
+			if (!delimiterPosition)
+			{
+				fatal2i("ioi: offset and package name: no delimiter found");
+			}
+
+			absoluteOffset += ourHex2Uint(buf);
+			(*record->offsetPtr) = absoluteOffset;
+			record->packageNamePtr->assign((const char*)delimiterPosition+1, buf+bufSize-1);
 			callbacks.main();
 		}
 		while (file.rawGetLine(buf, bufSize), bufSize > 1)
@@ -143,8 +158,14 @@ string getIoiPath(const string& path)
 	return path + indexPathSuffix;
 }
 
+void putUint2Hex(File& file, uint32_t value)
+{
+	char buf[sizeof(value)*2 + 1];
+
+	file.put(buf, sprintf(buf, "%x", value));
 }
 
+}
 
 void processIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
@@ -180,8 +201,9 @@ void generate(const string& indexPath, const string& temporaryPath)
 	}
 
 	string packageName;
+	uint32_t previousOffset = 0;
 	uint32_t offset;
-	bool isFirstRecord = false;
+	bool isFirstRecord = true;
 
 	Record record;
 	record.offsetPtr = &offset;
@@ -189,19 +211,23 @@ void generate(const string& indexPath, const string& temporaryPath)
 
 	Callbacks callbacks;
 	callbacks.main =
-			[&file, &isFirstRecord, &offset, &packageName]()
+			[&file, &isFirstRecord, &offset, &previousOffset, &packageName]()
 			{
 				if (!isFirstRecord) file.put("\n");
 				isFirstRecord = false;
 
-				auto convertedOffset = htonl(offset);
-				file.put(reinterpret_cast< const char* >(&convertedOffset), sizeof(convertedOffset));
+				auto relativeOffset = offset - previousOffset;
+				putUint2Hex(file, relativeOffset);
+				file.put("\0", 1);
 				file.put(packageName);
 				file.put("\n");
+
+				previousOffset = offset;
 			};
 	callbacks.provides =
 			[&file](const char* begin, const char* end)
 			{
+				file.put(&field::provides, 1);
 				file.put(begin, end - begin);
 				file.put("\n");
 			};
