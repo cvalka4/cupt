@@ -664,8 +664,11 @@ struct MetadataWorker::IndexUpdateInfo
 
 void MetadataWorker::__generate_index_of_index(const string& sourcePath)
 {
-	auto temporaryPath = getDownloadPath(sourcePath) + ".ioi";
-	ioi::generate(sourcePath, temporaryPath);
+	if (!_config->getBool("cupt::worker::simulate"))
+	{
+		auto temporaryPath = getDownloadPath(sourcePath) + ".ioi";
+		ioi::generate(sourcePath, temporaryPath);
+	}
 }
 
 bool MetadataWorker::__update_main_index(download::Manager& downloadManager,
