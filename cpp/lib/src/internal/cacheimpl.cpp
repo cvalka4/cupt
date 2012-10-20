@@ -35,6 +35,7 @@
 #include <internal/regex.hpp>
 #include <internal/common.hpp>
 #include <internal/cachefiles.hpp>
+#include <internal/indexofindex.hpp>
 
 namespace cupt {
 namespace internal {
@@ -546,7 +547,7 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 		ioiRecord.packageNamePtr = &packageName;
 
 		ioi::processIndex(path,
-				[this]()
+				[this, &packageName, &alias, &prePackagesStorage, &prePackageRecord, &ioiRecord]()
 				{
 					try
 					{
@@ -564,9 +565,10 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 					auto persistentPackageNamePtr = (const string*)
 							((const char*)(&prePackageRecords) - offsetof(PrePackageMap::value_type, second));
 
-					if (ioiRecord.providesValueBegin)
+					if (ioiRecord.providesBegin)
 					{
-						processProvides(persistentPackageNamePtr, record.providesValueBegin, record.providesValueLength);
+						processProvides(persistentPackageNamePtr,
+								ioiRecord.providesBegin, ioiRecord.providesEnd);
 					}
 				},
 				&ioiRecord);
