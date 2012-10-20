@@ -535,64 +535,41 @@ void CacheImpl::processIndexFile(const string& path, IndexEntry::Type category,
 
 	releaseInfoAndFileStorage.push_back(make_pair(releaseInfo, file));
 	PrePackageRecord prePackageRecord;
-	prePackageRecord.offset = 0;
 	prePackageRecord.releaseInfoAndFile = &*(releaseInfoAndFileStorage.rbegin());
 
 	try
 	{
 		string packageName;
 
-		while (true)
-		{
-			const char* buf;
-			size_t size;
-			auto getNextLine = [&file, &buf, &size, &prePackageRecord]
-			{
-				file->rawGetLine(buf, size);
-				prePackageRecord.offset += size;
-			};
+		ioi::Record ioiRecord;
+		ioiRecord.offsetPtr = &prePackageRecord.offset;
+		ioiRecord.packageNamePtr = &packageName;
 
-			getNextLine();
-			if (size == 0)
-			{
-				break; // eof
-			}
-
-			static const size_t packageAnchorLength = sizeof("Package: ") - 1;
-			if (size > packageAnchorLength && !memcmp("Package: ", buf, packageAnchorLength))
-			{
-				packageName.assign(buf + packageAnchorLength, size - packageAnchorLength - 1);
-			}
-			else
-			{
-				fatal2(__("unable to find a Package line"));
-			}
-
-			try
-			{
-				checkPackageName(packageName);
-			}
-			catch (Exception&)
-			{
-				warn2(__("discarding this package version from the index '%s'"), alias);
-				while (getNextLine(), size > 1) {}
-				continue;
-			}
-
-			auto& prePackageRecords = prePackagesStorage[std::move(packageName)];
-			prePackageRecords.push_back(prePackageRecord);
-
-			auto persistentPackageNamePtr = (const string*)
-					((const char*)(&prePackageRecords) - offsetof(PrePackageMap::value_type, second));
-			while (getNextLine(), size > 1)
-			{
-				static const size_t providesAnchorLength = sizeof("Provides: ") - 1;
-				if (*buf == 'P' && size > providesAnchorLength && !memcmp("rovides: ", buf+1, providesAnchorLength-1))
+		ioi::processIndex(path,
+				[this]()
 				{
-					processProvides(persistentPackageNamePtr, buf + providesAnchorLength, buf + size - 1);
-				}
-			}
-		}
+					try
+					{
+						checkPackageName(packageName);
+					}
+					catch (Exception&)
+					{
+						warn2(__("discarding this package version from the index '%s'"), alias);
+						return;
+					}
+
+					auto& prePackageRecords = prePackagesStorage[std::move(packageName)];
+					prePackageRecords.push_back(prePackageRecord);
+
+					auto persistentPackageNamePtr = (const string*)
+							((const char*)(&prePackageRecords) - offsetof(PrePackageMap::value_type, second));
+
+					if (ioiRecord.providesValueBegin)
+					{
+						processProvides(persistentPackageNamePtr, record.providesValueBegin, record.providesValueLength);
+					}
+				},
+				&ioiRecord);
 	}
 	catch (Exception&)
 	{
