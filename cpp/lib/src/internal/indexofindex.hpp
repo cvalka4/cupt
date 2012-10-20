@@ -36,6 +36,8 @@ struct Callbacks
 };
 
 void processIndex(const string& path, const Callbacks&, Record*);
+void removeRelatedFiles(const string& path);
+void generate(const string& indexPath, const string& temporaryPath);
 
 }
 }

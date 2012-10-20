@@ -31,6 +31,7 @@
 #include <internal/lock.hpp>
 #include <internal/tagparser.hpp>
 #include <internal/common.hpp>
+#include <internal/indexofindex.hpp>
 
 #include <internal/worker/metadata.hpp>
 
@@ -93,6 +94,7 @@ std::function< string () > generateMovingSub(const string& downloadPath, const s
 {
 	return [downloadPath, targetPath]() -> string
 	{
+		ioi::removeRelatedFiles(targetPath);
 		if (fs::move(downloadPath, targetPath))
 		{
 			return "";
@@ -660,6 +662,12 @@ struct MetadataWorker::IndexUpdateInfo
 	string label;
 };
 
+void MetadataWorker::__generate_index_of_index(const string& sourcePath)
+{
+	auto temporaryPath = getDownloadPath(sourcePath) + ".ioi";
+	ioi::generate(sourcePath, temporaryPath);
+}
+
 bool MetadataWorker::__update_main_index(download::Manager& downloadManager,
 		const cachefiles::IndexEntry& indexEntry, bool releaseFileChanged, bool& mainIndexFileChanged)
 {
@@ -669,8 +677,13 @@ bool MetadataWorker::__update_main_index(download::Manager& downloadManager,
 	info.targetPath = cachefiles::getPathOfIndexList(*_config, indexEntry);
 	info.downloadInfo = cachefiles::getDownloadInfoOfIndexList(*_config, indexEntry);
 	info.label = __("index");
-	return __update_index(downloadManager, indexEntry,
+	auto result = __update_index(downloadManager, indexEntry,
 			std::move(info), releaseFileChanged, mainIndexFileChanged);
+	if (result)
+	{
+		__generate_index_of_index(info.targetPath);
+	}
+	return result;
 }
 
 bool MetadataWorker::__update_index(download::Manager& downloadManager, const cachefiles::IndexEntry& indexEntry,

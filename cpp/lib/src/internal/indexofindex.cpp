@@ -135,14 +135,20 @@ void parseIndexOfIndex(const string& path, const Callbacks& callbacks, Record* r
 	}
 }
 
+static const string prefixOfIndexPathSuffix = ".index";
+static const string indexPathSuffix = prefixOfIndexPathSuffix + "0";
+
+string getIoiPath(const string& path)
+{
+	return path + indexPathSuffix;
+}
+
 }
 
 
 void processIndex(const string& path, const Callbacks& callbacks, Record* record)
 {
-	static const string currentIndexSuffix = ".index0";
-
-	auto ioiPath = path + currentIndexSuffix;
+	auto ioiPath = getIoiPath(path);
 	if (fs::fileExists(ioiPath) && (getModifyTime(ioiPath) >= getModifyTime(path)))
 	{
 		parseIndexOfIndex(ioiPath, callbacks, record);
@@ -151,6 +157,58 @@ void processIndex(const string& path, const Callbacks& callbacks, Record* record
 	{
 		parseFullIndex(path, callbacks, record);
 	}
+}
+
+void removeRelatedFiles(const string& path)
+{
+	for (const auto& relatedPath: fs::glob(path + prefixOfIndexPathSuffix + "*"))
+	{
+		if (unlink(relatedPath.c_str()) == -1)
+		{
+			fatal2e("unable to remove the file '%s'", relatedPath);
+		}
+	}
+}
+
+void generate(const string& indexPath, const string& temporaryPath)
+{
+	string openError;
+	File file(temporaryPath, "w", openError);
+	if (!openError.empty())
+	{
+		fatal2(__("unable to open the file '%s': %s"), indexPath, openError);
+	}
+
+	string packageName;
+	uint32_t offset;
+	bool isFirstRecord = false;
+
+	Record record;
+	record.offsetPtr = &offset;
+	record.packageNamePtr = &packageName;
+
+	Callbacks callbacks;
+	callbacks.main =
+			[&file, &isFirstRecord, &offset, &packageName]()
+			{
+				if (!isFirstRecord) file.put("\n");
+				isFirstRecord = false;
+
+				auto convertedOffset = htonl(offset);
+				file.put(reinterpret_cast< const char* >(&convertedOffset), sizeof(convertedOffset));
+				file.put(packageName);
+				file.put("\n");
+			};
+	callbacks.provides =
+			[&file](const char* begin, const char* end)
+			{
+				file.put(begin, end - begin);
+				file.put("\n");
+			};
+
+	parseFullIndex(indexPath, callbacks, &record);
+
+	fs::move(temporaryPath, getIoiPath(indexPath));
 }
 
 }
