@@ -37,13 +37,30 @@ using std::stack;
 #include "../misc.hpp"
 #include "../selectors.hpp"
 
-auto printTag = [&cout](const string& first, const string& second)
+namespace {
+
+// "print tag"
+void p(const string& first, const string& second, bool withNewLine = true)
 {
 	if (!second.empty())
 	{
-		cout << first << ": " << second << endl;
+		cout << first << ": " << second;
+		if (withNewLine) cout << endl;
 	}
-};
+}
+
+string getPrintableInstalledStatus(const Cache& cache, const string& packageName)
+{
+	auto installedInfo = cache.getSystemState()->getInstalledInfo(packageName);
+	string status = __(system::State::InstalledRecord::Status::strings[installedInfo->status].c_str());
+	if (installedInfo->want == system::State::InstalledRecord::Want::Hold)
+	{
+		status += string(" (") + __("on hold") + ")";
+	}
+	return status;
+}
+
+}
 
 int showBinaryVersions(Context& context)
 {
@@ -74,10 +91,7 @@ int showBinaryVersions(Context& context)
 	auto getReverseProvides = [&cache](const string& packageName) -> RelationLine
 	{
 		RelationLine result;
-		if (!checkPackageName(packageName, false))
-		{
-			return result;
-		}
+
 		RelationExpression virtualRelationExpression(packageName);
 		for (const auto& version: cache->getSatisfyingVersions(virtualRelationExpression))
 		{
@@ -90,10 +104,8 @@ int showBinaryVersions(Context& context)
 		return result;
 	};
 
-	auto p = printTag;
-	for (size_t i = 0; i < arguments.size(); ++i)
+	for (const string& packageExpression: arguments)
 	{
-		const string& packageExpression = arguments[i];
 		vector< const BinaryVersion* > versions;
 		if (config->getBool("apt::cache::allversions"))
 		{
@@ -101,7 +113,6 @@ int showBinaryVersions(Context& context)
 		}
 		else
 		{
-			bool foundVirtual = false;
 			if (!cache->getBinaryPackage(packageExpression))
 			{
 				// there is no such binary package, maybe it's virtual?
@@ -109,13 +120,10 @@ int showBinaryVersions(Context& context)
 				if (!reverseProvides.empty())
 				{
 					p(__("Pure virtual package, provided by"), reverseProvides.toString());
-					foundVirtual = true;
+					continue;
 				}
 			}
-			if (!foundVirtual)
-			{
-				versions = selectBinaryVersionsWildcarded(*cache, packageExpression);
-			}
+			versions = selectBinaryVersionsWildcarded(*cache, packageExpression);
 		}
 
 		for (const auto& version: versions)
@@ -125,13 +133,7 @@ int showBinaryVersions(Context& context)
 			p(__("Version"), version->versionString);
 			if (version->isInstalled())
 			{
-				auto installedInfo = cache->getSystemState()->getInstalledInfo(packageName);
-				string status = __(system::State::InstalledRecord::Status::strings[installedInfo->status].c_str());
-				if (installedInfo->want == system::State::InstalledRecord::Want::Hold)
-				{
-					status += string(" (") + __("on hold") + ")";
-				}
-				p(__("Status"), status);
+				p(__("Status"), getPrintableInstalledStatus(*cache, packageName));
 				bool isAutoInstalled = cache->isAutomaticallyInstalled(packageName);
 				p(__("Automatically installed"), isAutoInstalled ? __("yes") : __("no"));
 			}
@@ -182,7 +184,7 @@ int showBinaryVersions(Context& context)
 			p("MD5", version->file.hashSums[HashSums::MD5]);
 			p("SHA1", version->file.hashSums[HashSums::SHA1]);
 			p("SHA256", version->file.hashSums[HashSums::SHA256]);
-			p(__("Description"), cache->getLocalizedDescription(version));
+			p(__("Description"), cache->getLocalizedDescription(version), false);
 			p(__("Tags"), version->tags);
 			if (version->others)
 			{
@@ -222,8 +224,6 @@ int showSourceVersions(Context& context)
 		Version::parseOthers = true;
 	}
 	auto cache = context.getCache(/* source */ true, /* binary */ true, /* installed */ true);
-
-	auto p = printTag;
 
 	for (size_t i = 0; i < arguments.size(); ++i)
 	{
