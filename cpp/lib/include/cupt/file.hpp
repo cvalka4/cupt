@@ -36,6 +36,7 @@ struct FileImpl;
 class CUPT_API File
 {
 	internal::FileImpl* __impl;
+	File(const File&) = delete;
  public:
 	/// constructor
 	/**
@@ -50,6 +51,7 @@ class CUPT_API File
 	 * @param [out] error if open fails, human readable error will be placed here
 	 */
 	File(const string& path, const char* mode, string& error);
+	File(File&&);
 	/// destructor
 	virtual ~File();
 	/// reads new line
@@ -150,6 +152,17 @@ class CUPT_API File
 	 * @param flags flags passed to @c flock
 	 */
 	void lock(int flags);
+};
+
+// File wrapper which throws on open errors
+class CUPT_API RequiredFile: public File
+{
+ public:
+	/*
+	 * Passes @a path and @a mode to File::File(). If file failed to open (i.e.
+	 * !openError.empty()), throws the exception.
+	 */
+	RequiredFile(const string& path, const char* mode);
 };
 
 } // namespace

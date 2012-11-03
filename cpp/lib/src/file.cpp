@@ -159,6 +159,12 @@ File::File(const string& path, const char* mode, string& openError)
 	: __impl(new internal::FileImpl(path, mode, openError))
 {}
 
+File::File(File&& other)
+	: __impl(other.__impl)
+{
+	other.__impl = nullptr;
+}
+
 File::~File()
 {
 	delete __impl;
@@ -325,6 +331,25 @@ void File::unbufferedPut(const char* data, size_t size)
 		currentOffset += writeResult;
 	}
 }
+
+namespace {
+
+File openRequiredFile(const string& path, const char* mode)
+{
+	string openError;
+	File file(path, mode, openError);
+	if (!openError.empty())
+	{
+		fatal2(__("unable to open the file '%s': %s"), path, openError);
+	}
+	return std::move(file);
+}
+
+}
+
+RequiredFile::RequiredFile(const string& path, const char* mode)
+	: File(openRequiredFile(path, mode))
+{}
 
 } // namespace
 
