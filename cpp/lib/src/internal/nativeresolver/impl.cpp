@@ -179,7 +179,7 @@ void NativeResolverImpl::upgrade()
 		const string& packageName = it->first;
 		auto package = __cache->getBinaryPackage(packageName);
 
-		// if there is original version, then at least one policy version should exist
+		// if there is original version, then the preferred version should exist
 		auto supposedVersion = static_cast< const BinaryVersion* >
 				(__cache->getPreferredVersion(package));
 		if (!supposedVersion)
@@ -723,17 +723,50 @@ void NativeResolverImpl::__prepare_reject_requests(vector< unique_ptr< Action > 
 	}
 }
 
+void NativeResolverImpl::__fillSuggestedPackageReasons(const Solution& solution,
+		const string& packageName, Resolver::SuggestedPackage& suggestedPackage,
+		const dg::Element* elementPtr, map< const dg::Element*, size_t >& reasonProcessingCache) const
+{
+	static const shared_ptr< const Reason > userReason(new UserReason);
+	static const shared_ptr< const Reason > autoRemovalReason(new AutoRemovalReason);
+
+	auto fillReasonElements = [&suggestedPackage]
+			(const PackageEntry::IntroducedBy&, const dg::Element* elementPtr)
+	{
+		auto versionVertex = static_cast< const dg::VersionVertex* >(elementPtr);
+		suggestedPackage.reasonPackageNames.push_back(versionVertex->getPackageName());
+	};
+
+	auto packageEntryPtr = solution.getPackageEntry(elementPtr);
+	if (packageEntryPtr->autoremoved)
+	{
+		suggestedPackage.reasons.push_back(autoRemovalReason);
+	}
+	else
+	{
+		const auto& introducedBy = packageEntryPtr->introducedBy;
+		if (!introducedBy.empty())
+		{
+			suggestedPackage.reasons.push_back(introducedBy.getReason());
+			__solution_storage->processReasonElements(solution, reasonProcessingCache,
+					introducedBy, elementPtr, std::cref(fillReasonElements));
+		}
+		auto initialPackageIt = __initial_packages.find(packageName);
+		if (initialPackageIt != __initial_packages.end() && initialPackageIt->second.modified)
+		{
+			suggestedPackage.reasons.push_back(userReason);
+		}
+	}
+}
+
 Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 		const Solution& solution, Resolver::CallbackType callback, bool trackReasons)
 {
-	static const shared_ptr< system::Resolver::UserReason >
-			userReason(new system::Resolver::UserReason);
-	static const shared_ptr< const Reason > autoRemovalReason(new AutoRemovalReason);
-
-
 	// build "user-frienly" version of solution
 	Resolver::Offer offer;
 	Resolver::SuggestedPackages& suggestedPackages = offer.suggestedPackages;
+
+	map< const dg::Element*, size_t > reasonProcessingCache;
 
 	auto elementPtrs = solution.getElements();
 	FORIT(elementPtrIt, elementPtrs)
@@ -756,23 +789,8 @@ Resolver::UserAnswer::Type NativeResolverImpl::__propose_solution(
 
 			if (trackReasons)
 			{
-				auto packageEntryPtr = solution.getPackageEntry(*elementPtrIt);
-				if (packageEntryPtr->autoremoved)
-				{
-					suggestedPackage.reasons.push_back(autoRemovalReason);
-				}
-				else
-				{
-					if (!packageEntryPtr->introducedBy.empty())
-					{
-						suggestedPackage.reasons.push_back(packageEntryPtr->introducedBy.getReason());
-					}
-					auto initialPackageIt = __initial_packages.find(packageName);
-					if (initialPackageIt != __initial_packages.end() && initialPackageIt->second.modified)
-					{
-						suggestedPackage.reasons.push_back(userReason);
-					}
-				}
+				__fillSuggestedPackageReasons(solution, packageName, suggestedPackage,
+						*elementPtrIt, reasonProcessingCache);
 			}
 			suggestedPackage.automaticallyInstalledFlag = __compute_target_auto_status(packageName);
 		}

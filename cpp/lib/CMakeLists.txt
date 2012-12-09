@@ -28,6 +28,7 @@ add_library(libcupt3 SHARED
 	./src/internal/logger.cpp
 	./src/internal/pipe.cpp
 	./src/internal/basepackageiterator.cpp
+	./src/internal/indexofindex.cpp
 	./src/config.cpp
 	./src/cache.cpp
 	./src/cache/relation.cpp
@@ -55,7 +56,7 @@ add_library(libcupt3 SHARED
 	./src/hashsums.cpp
 	./src/versionstring.cpp
 )
-set_target_properties(libcupt3 PROPERTIES VERSION 3 SOVERSION ${CUPT_SOVERSION} OUTPUT_NAME cupt3)
+set_target_properties(libcupt3 PROPERTIES SOVERSION ${CUPT_SOVERSION} OUTPUT_NAME cupt3)
 target_link_libraries(libcupt3 dl rt gcrypt)
 
 install(TARGETS libcupt3 DESTINATION lib)

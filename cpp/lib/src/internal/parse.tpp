@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2011 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2012 by Eugene V. Lyubimkin                             *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -15,48 +15,56 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#ifndef CUPT_INTERNAL_NATIVERESOLVER_DECISIONFAILTREE_SEEN
-#define CUPT_INTERNAL_NATIVERESOLVER_DECISIONFAILTREE_SEEN
-
-#include <list>
-
-#include <internal/nativeresolver/solution.hpp>
-#include <internal/graph.hpp>
 
 namespace cupt {
 namespace internal {
+namespace parse {
 
-using std::unique_ptr;
+namespace {
 
-class DecisionFailTree
+template < class IterT >
+inline bool findSpaceSymbolSpace(const IterT& begin, const IterT& end,
+		char symbol, IterT& resultBegin, IterT& resultEnd)
 {
-	struct Decision
+	for (auto current = begin; current != end; ++current)
 	{
-		PackageEntry::IntroducedBy introducedBy;
-		size_t level;
-		const dg::Element* insertedElementPtr;
-	};
-	struct FailItem
-	{
-		size_t solutionId;
-		vector< Decision > decisions;
-	};
-	std::list< FailItem > __fail_items;
+		if (*current == symbol)
+		{
+			// found!
+			resultBegin = current;
+			while (resultBegin != begin && *(resultBegin-1) == ' ')
+			{
+				--resultBegin;
+			}
+			resultEnd = current+1;
+			while (resultEnd != end && *resultEnd == ' ')
+			{
+				++resultEnd;
+			}
+			return true;
+		}
+	}
+	return false;
+}
 
-	static string __decisions_to_string(const vector< Decision >&);
-	static vector< Decision > __get_decisions(
-			const SolutionStorage& solutionStorage, const Solution& solution,
-			const PackageEntry::IntroducedBy&);
-	static bool __is_dominant(const FailItem&, const dg::Element*);
- public:
-	string toString() const;
-	void addFailedSolution(const SolutionStorage&, const Solution&,
-			const PackageEntry::IntroducedBy&);
-	void clear();
-};
+}
+
+template< typename IterT, typename CallbackT >
+void processSpaceCharSpaceDelimitedStrings(IterT begin, IterT end,
+		char delimiter, const CallbackT& callback)
+{
+	IterT current = begin;
+	IterT delimiterBegin;
+	IterT delimiterEnd;
+	while (findSpaceSymbolSpace(current, end, delimiter, delimiterBegin, delimiterEnd))
+	{
+		callback(current, delimiterBegin);
+		current = delimiterEnd;
+	}
+	callback(current, end);
+}
 
 }
 }
-
-#endif
+}
 

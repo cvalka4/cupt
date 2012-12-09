@@ -39,8 +39,7 @@ using cache::Version;
 using cache::BinaryVersion;
 using cache::ReleaseInfo;
 
-PinInfo::PinInfo(const shared_ptr< const Config >& config,
-		const shared_ptr< const system::State >& systemState)
+PinInfo::PinInfo(const shared_ptr< const Config >& config, const system::State* systemState)
 	: config(config), systemState(systemState)
 {
 	init();
@@ -158,12 +157,7 @@ void PinInfo::loadData(const string& path)
 	// Pin: a=experimental
 	// Pin-Priority: 1100
 
-	string openError;
-	File file(path, "r", openError);
-	if (!openError.empty())
-	{
-		fatal2(__("unable to open the file '%s': %s"), path, openError);
-	}
+	RequiredFile file(path, "r");
 
 	smatch m;
 

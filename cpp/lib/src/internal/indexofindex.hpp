@@ -1,5 +1,5 @@
 /**************************************************************************
-*   Copyright (C) 2011 by Eugene V. Lyubimkin                             *
+*   Copyright (C) 2012 by Eugene V. Lyubimkin                             *
 *                                                                         *
 *   This program is free software; you can redistribute it and/or modify  *
 *   it under the terms of the GNU General Public License                  *
@@ -15,48 +15,30 @@
 *   Free Software Foundation, Inc.,                                       *
 *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA               *
 **************************************************************************/
-#ifndef CUPT_INTERNAL_NATIVERESOLVER_DECISIONFAILTREE_SEEN
-#define CUPT_INTERNAL_NATIVERESOLVER_DECISIONFAILTREE_SEEN
-
-#include <list>
-
-#include <internal/nativeresolver/solution.hpp>
-#include <internal/graph.hpp>
 
 namespace cupt {
 namespace internal {
+namespace ioi {
 
-using std::unique_ptr;
-
-class DecisionFailTree
+struct Record
 {
-	struct Decision
-	{
-		PackageEntry::IntroducedBy introducedBy;
-		size_t level;
-		const dg::Element* insertedElementPtr;
-	};
-	struct FailItem
-	{
-		size_t solutionId;
-		vector< Decision > decisions;
-	};
-	std::list< FailItem > __fail_items;
+	uint32_t* offsetPtr;
+	string* packageNamePtr;
+};
+// index suffix number must be incremented every time Record changes
 
-	static string __decisions_to_string(const vector< Decision >&);
-	static vector< Decision > __get_decisions(
-			const SolutionStorage& solutionStorage, const Solution& solution,
-			const PackageEntry::IntroducedBy&);
-	static bool __is_dominant(const FailItem&, const dg::Element*);
- public:
-	string toString() const;
-	void addFailedSolution(const SolutionStorage&, const Solution&,
-			const PackageEntry::IntroducedBy&);
-	void clear();
+struct Callbacks
+{
+	std::function< void () > main;
+	std::function< void (const char*, const char*) > provides;
 };
 
-}
-}
+void processIndex(const string& path, const Callbacks&, const Record&);
+string getIndexOfIndexPath(const string& path);
+void removeIndexOfIndex(const string& path);
+void generate(const string& indexPath, const string& temporaryPath);
 
-#endif
+}
+}
+}
 

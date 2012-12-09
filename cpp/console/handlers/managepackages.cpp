@@ -42,7 +42,7 @@ using std::endl;
 #include <cupt/versionstring.hpp>
 
 typedef Worker::Action WA;
-const WA::Type fakeNotPolicyVersionAction = WA::Type(999);
+const WA::Type fakeNotPreferredVersionAction = WA::Type(999);
 const WA::Type fakeAutoRemove = WA::Type(1000);
 const WA::Type fakeAutoPurge = WA::Type(1001);
 const WA::Type fakeBecomeAutomaticallyInstalled = WA::Type(1002);
@@ -82,12 +82,7 @@ static void unrollFileArguments(vector< string >& arguments)
 		{
 			const string path = argument.substr(1);
 			// reading package expressions from file
-			string openError;
-			File file(path, "r", openError);
-			if (!openError.empty())
-			{
-				fatal2(__("unable to open the file '%s': %s"), path, openError);
-			}
+			RequiredFile file(path, "r");
 			string line;
 			while (!file.getLine(line).eof())
 			{
@@ -434,7 +429,7 @@ void showVersionInfoIfNeeded(const Cache& cache, const string& packageName,
 	string newVersionString = getVersionString(suggestedPackage.version);
 
 	if (!oldVersionString.empty() && !newVersionString.empty() &&
-			(actionType != fakeNotPolicyVersionAction || oldVersionString != newVersionString))
+			(actionType != fakeNotPreferredVersionAction || oldVersionString != newVersionString))
 	{
 		cout << format2(" [%s -> %s]", oldVersionString, newVersionString);
 	}
@@ -447,7 +442,7 @@ void showVersionInfoIfNeeded(const Cache& cache, const string& packageName,
 		cout << format2(" [%s]", newVersionString);
 	}
 
-	if (actionType == fakeNotPolicyVersionAction)
+	if (actionType == fakeNotPreferredVersionAction)
 	{
 		cout << ", " << __("preferred") << ": " << getVersionString(cache.getPreferredVersion(package));
 	}
@@ -586,6 +581,10 @@ void showReason(const Resolver::SuggestedPackage& suggestedPackage)
 	for (const auto& reason: suggestedPackage.reasons)
 	{
 		cout << "  " << __("reason: ") << reason->toString() << endl;
+	}
+	if (!suggestedPackage.reasonPackageNames.empty())
+	{
+		cout << "  " << __("caused by changes in: ") << join(", ", suggestedPackage.reasonPackageNames) << endl;
 	}
 	cout << endl;
 }
@@ -736,7 +735,7 @@ Resolver::UserAnswer::Type askUserAboutSolution(const Config& config,
 	}
 }
 
-Resolver::SuggestedPackages generateNotPolicyVersionList(const Cache& cache,
+Resolver::SuggestedPackages generateNotPreferredVersionList(const Cache& cache,
 		const Resolver::SuggestedPackages& packages)
 {
 	Resolver::SuggestedPackages result;
@@ -745,8 +744,9 @@ Resolver::SuggestedPackages generateNotPolicyVersionList(const Cache& cache,
 		const auto& suggestedVersion = suggestedPackage.second.version;
 		if (suggestedVersion)
 		{
-			auto policyVersion = cache.getPreferredVersion(getBinaryPackage(cache, suggestedVersion->packageName));
-			if (!(policyVersion == suggestedVersion))
+			auto preferredVersion = cache.getPreferredVersion(
+					getBinaryPackage(cache, suggestedVersion->packageName));
+			if (!(preferredVersion == suggestedVersion))
 			{
 				result.insert(suggestedPackage);
 			}
@@ -862,9 +862,9 @@ struct PackageChangeInfoFlags
 		: versionFlags(config)
 	{
 		sizeChange = (config.getBool("cupt::console::actions-preview::show-size-changes") &&
-				actionType != fakeNotPolicyVersionAction);
+				actionType != fakeNotPreferredVersionAction);
 		reasons = (config.getBool("cupt::console::actions-preview::show-reasons") &&
-				actionType != fakeNotPolicyVersionAction);
+				actionType != fakeNotPreferredVersionAction);
 	}
 	bool empty() const
 	{
@@ -976,8 +976,8 @@ Resolver::SuggestedPackages getSuggestedPackagesByAction(const Cache& cache,
 	switch (actionType)
 	{
 		#pragma GCC diagnostic ignored "-Wswitch"
-		case fakeNotPolicyVersionAction:
-			return generateNotPolicyVersionList(cache, offer.suggestedPackages);
+		case fakeNotPreferredVersionAction:
+			return generateNotPreferredVersionList(cache, offer.suggestedPackages);
 		case fakeAutoRemove:
 			return filterNoLongerNeeded(actionsPreview.groups[WA::Remove], false);
 		case fakeAutoPurge:
@@ -1008,7 +1008,7 @@ map< WA::Type, string > getActionDescriptionMap()
 		{ WA::Deconfigure, __("will be deconfigured") },
 		{ WA::ProcessTriggers, __("will have triggers processed") },
 		{ WA::Reinstall, __("will be reinstalled") },
-		{ fakeNotPolicyVersionAction, __("will have a not preferred version") },
+		{ fakeNotPreferredVersionAction, __("will have a not preferred version") },
 		{ fakeAutoRemove, __("are no longer needed and thus will be auto-removed") },
 		{ fakeAutoPurge, __("are no longer needed and thus will be auto-purged") },
 		{ fakeBecomeAutomaticallyInstalled, __("will be marked as automatically installed") },
@@ -1025,7 +1025,7 @@ vector< WA::Type > getActionTypesInPrintOrder(bool showNotPreferred)
 	};
 	if (showNotPreferred)
 	{
-		result.push_back(fakeNotPolicyVersionAction);
+		result.push_back(fakeNotPreferredVersionAction);
 	}
 	result.push_back(fakeAutoRemove);
 	result.push_back(fakeAutoPurge);
@@ -1066,7 +1066,7 @@ Resolver::CallbackType generateManagementPrompt(const Config& config,
 						offer, *actionsPreview, actionType);
 				if (actionSuggestedPackages.empty()) continue;
 
-				if (actionType != fakeNotPolicyVersionAction)
+				if (actionType != fakeNotPreferredVersionAction)
 				{
 					actionCount += actionSuggestedPackages.size();
 				}
