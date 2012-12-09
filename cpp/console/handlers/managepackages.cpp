@@ -18,6 +18,7 @@
 #include <iostream>
 using std::cout;
 using std::endl;
+#include <stack>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -621,15 +622,24 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 		return;
 	}
 
-	string packageName = answer;
-	if (!suggestedPackages.count(packageName))
+	string topPackageName = answer;
+	if (!suggestedPackages.count(topPackageName))
 	{
-		cout << format2(__("The package '%s' is not going to change its state."), packageName) << endl;
+		cout << format2(__("The package '%s' is not going to change its state."), topPackageName) << endl;
 		return;
 	}
 
-	for (;;)
+	struct PackageAndLevel
 	{
+		string packageName;
+		size_t level;
+	};
+	std::stack< PackageAndLevel > reasonStack({ PackageAndLevel{ topPackageName, 0 } });
+
+	while (!reasonStack.empty())
+	{
+		const string& packageName = reasonStack.top().packageName;
+
 		auto reasonIt = suggestedPackages.find(packageName);
 		if (reasonIt == suggestedPackages.end())
 		{
@@ -642,20 +652,14 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 		}
 		const auto& reasonPtr = reasons[0];
 
-		cout << format2("  %s: %s", packageName, reasonPtr->toString()) << endl;
-		if (const auto& relationExpressionReasonPtr =
-				dynamic_pointer_cast< const Resolver::RelationExpressionReason >(reasonPtr))
+		size_t level = reasonStack.top().level;
+		cout << format2("%s%s: %s", string((level+1)*2, ' '), packageName, reasonPtr->toString()) << endl;
+
+		reasonStack.pop();
+
+		for (const string& reasonPackageName: reasonIt->second.reasonPackageNames)
 		{
-			// FIXME: we cannot determine a "predecessor reason" reliably
-			packageName = relationExpressionReasonPtr->version->packageName;
-		}
-		else if (const auto& syncReasonPtr = dynamic_pointer_cast< const Resolver::SynchronizationReason >(reasonPtr))
-		{
-			packageName = syncReasonPtr->relatedPackageName;
-		}
-		else
-		{
-			break;
+			reasonStack.push({ reasonPackageName, level + 1 });
 		}
 	}
 	cout << endl;
