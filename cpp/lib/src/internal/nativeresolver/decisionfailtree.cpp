@@ -65,7 +65,7 @@ string DecisionFailTree::toString() const
 
 vector< DecisionFailTree::Decision > DecisionFailTree::__get_decisions(
 		const SolutionStorage& solutionStorage, const Solution& solution,
-		const PackageEntry::IntroducedBy& lastIntroducedBy)
+		const IntroducedBy& lastIntroducedBy)
 {
 	vector< Decision > result;
 
@@ -80,17 +80,17 @@ vector< DecisionFailTree::Decision > DecisionFailTree::__get_decisions(
 
 		result.push_back(item);
 
-		auto queueItem = [&chainStack, &item](
-				const PackageEntry::IntroducedBy& introducedBy,
-				const dg::Element* insertedElementPtr)
+		auto queueItem = [&chainStack, &item, &solutionStorage, &solution](const dg::Element* element)
 		{
-			if (!introducedBy.empty())
+			auto callback = [&chainStack, &item, &element](const IntroducedBy& introducedBy)
 			{
-				chainStack.push(Decision { introducedBy, item.level + 1, insertedElementPtr });
-			}
+				chainStack.push(Decision { introducedBy, item.level + 1, element });
+			};
+			solutionStorage.findIntroducedBy(solution, element,
+					solution.getPackageEntry(element), std::cref(callback));
 		};
 
-		solutionStorage.processReasonElements(solution, elementPositionCache,
+		solutionStorage.findReasonElements(solution, elementPositionCache,
 				item.introducedBy, item.insertedElementPtr, std::cref(queueItem));
 	}
 
@@ -111,7 +111,7 @@ bool DecisionFailTree::__is_dominant(const FailItem& failItem, const dg::Element
 }
 
 void DecisionFailTree::addFailedSolution(const SolutionStorage& solutionStorage,
-		const Solution& solution, const PackageEntry::IntroducedBy& lastIntroducedBy)
+		const Solution& solution, const IntroducedBy& lastIntroducedBy)
 {
 	FailItem failItem;
 	failItem.solutionId = solution.id;
