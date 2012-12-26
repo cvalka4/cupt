@@ -636,6 +636,7 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 	};
 	std::stack< PackageAndLevel > reasonStack({ PackageAndLevel{ topPackageName, 0 } });
 
+	cout << endl;
 	while (!reasonStack.empty())
 	{
 		const string& packageName = reasonStack.top().packageName;
@@ -653,7 +654,7 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 		const auto& reasonPtr = reasons[0];
 
 		size_t level = reasonStack.top().level;
-		cout << format2("%s%s: %s", string((level+1)*2, ' '), packageName, reasonPtr->toString()) << endl;
+		cout << format2("%s%s: %s", string(level*2, ' '), packageName, reasonPtr->toString()) << endl;
 
 		reasonStack.pop();
 
