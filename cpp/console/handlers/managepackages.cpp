@@ -617,10 +617,7 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 	cout << __("Enter a binary package name to show reason chain for (empty to cancel): ");
 	string answer;
 	std::getline(std::cin, answer);
-	if (answer.empty())
-	{
-		return;
-	}
+	if (answer.empty()) return;
 
 	string topPackageName = answer;
 	if (!suggestedPackages.count(topPackageName))
