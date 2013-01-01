@@ -641,12 +641,12 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 		auto reasonIt = suggestedPackages.find(packageName);
 		if (reasonIt == suggestedPackages.end())
 		{
-			fatal2("internal error: a reason chain is broken: the package '%s' is not changed", packageName);
+			fatal2i("a reason chain is broken: the package '%s' is not changed", packageName);
 		}
 		const auto& reasons = reasonIt->second.reasons;
 		if (reasons.empty())
 		{
-			fatal2("internal error: no reasons available for the package '%s'", packageName);
+			fatal2i("no reasons available for the package '%s'", packageName);
 		}
 		const auto& reasonPtr = reasons[0];
 
