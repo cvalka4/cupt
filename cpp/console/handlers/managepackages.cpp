@@ -619,7 +619,7 @@ void showReasonChainForAskedPackage(const Resolver::SuggestedPackages& suggested
 	std::getline(std::cin, answer);
 	if (answer.empty()) return;
 
-	string topPackageName = answer;
+	const auto& topPackageName = answer;
 	if (!suggestedPackages.count(topPackageName))
 	{
 		cout << format2(__("The package '%s' is not going to change its state."), topPackageName) << endl;
